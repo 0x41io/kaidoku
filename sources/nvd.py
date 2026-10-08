@@ -87,7 +87,7 @@ def explain_vector(vector: str) -> list[tuple[str, str]]:
     return out
 
 
-def _affected(configurations: list, max_products: int = 8) -> list[dict]:
+def _affected(configurations: list, description: str = "", max_products: int = 200) -> list[dict]:
     """Turn CPE match data into [{'product': 'apache log4j', 'versions': ['>= 2.0.1, < 2.3.1']}]."""
     products: dict[str, list[str]] = {}
     for config in configurations or []:
@@ -121,7 +121,18 @@ def _affected(configurations: list, max_products: int = 8) -> list[dict]:
                 versions = products.setdefault(name, [])
                 if rng not in versions:
                     versions.append(rng)
-    return [{"product": p, "versions": v} for p, v in list(products.items())[:max_products]]
+    # Put the products the description actually talks about first. Big CVEs
+    # (like Log4Shell) list dozens of downstream vendor products, and the
+    # original vulnerable software would otherwise get buried.
+    desc = description.lower()
+
+    def mentioned(name: str) -> bool:
+        product = name.split(" ", 1)[-1]
+        return product in desc or product.replace(" ", "") in desc
+
+    items = [{"product": p, "vendor": p.split(" ", 1)[0], "versions": v} for p, v in products.items()]
+    items.sort(key=lambda a: not mentioned(a["product"]))  # stable: keeps NVD order otherwise
+    return items[:max_products]
 
 
 def _references(refs: list, limit: int = 6) -> list[dict]:
@@ -129,7 +140,13 @@ def _references(refs: list, limit: int = 6) -> list[dict]:
         tags = r.get("tags", [])
         return min((REF_PRIORITY.index(t) for t in tags if t in REF_PRIORITY), default=len(REF_PRIORITY))
 
-    ranked = sorted(refs or [], key=rank)
+    seen, unique = set(), []
+    for r in refs or []:
+        url = r.get("url", "").rstrip("/")
+        if url and url not in seen:
+            seen.add(url)
+            unique.append(r)
+    ranked = sorted(unique, key=rank)
     return [{"url": r["url"], "tags": r.get("tags", [])} for r in ranked[:limit]]
 
 
@@ -161,7 +178,7 @@ def parse(cve: dict) -> dict:
         "vector_explained": explain_vector(cvss["vector"]) if cvss else [],
         "cwes": cwes,
         "kev": kev,
-        "affected": _affected(cve.get("configurations", [])),
+        "affected": _affected(cve.get("configurations", []), desc),
         "references": _references(cve.get("references", [])),
     }
 

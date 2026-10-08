@@ -203,8 +203,12 @@ def _row(label: str, value: str, indent: str = "  ", width: int = 14) -> None:
     print(f"{indent}{paint(label.ljust(width), GREY)}{value}")
 
 
+def _cols() -> int:
+    return min(_shutil.get_terminal_size((100, 24)).columns, 120)
+
+
 def _wrap(text: str, indent: str) -> str:
-    width = max(40, min(_shutil.get_terminal_size((100, 24)).columns, 110) - len(indent))
+    width = max(40, _cols() - len(indent) - 2)
     return "\n".join(indent + line for line in _textwrap.wrap(text, width))
 
 
@@ -231,7 +235,7 @@ def cve_card(nvd: dict, epss: dict | None, verdict: dict) -> None:
     if epss:
         p, pct = epss["probability"], epss["percentile"]
         color = RED if p >= 0.1 else YELLOW if p >= 0.01 else GREY
-        prob = f"{p:.1%}" if p >= 0.01 else f"{p:.2%}"
+        prob = ">99.9%" if p >= 0.9995 else f"{p:.1%}" if p >= 0.01 else f"{p:.2%}"
         rank = f"(top {max(1 - pct, 0.001):.1%} of all CVEs)" if pct >= 0.9 else f"(riskier than {pct:.0%} of all CVEs)"
         _row("EPSS", f"{paint(prob, BOLD, color)} chance of exploitation in the next 30 days {paint(rank, GREY)}")
     else:
@@ -239,8 +243,8 @@ def cve_card(nvd: dict, epss: dict | None, verdict: dict) -> None:
 
     kev = nvd.get("kev")
     if kev:
-        due = f" · federal patch deadline {kev['action_due']}" if kev.get("action_due") else ""
-        _row("CISA KEV", paint("YES", BOLD, RED) + f" · exploited in the wild · added {kev['date_added']}{due}")
+        due = f" · US federal deadline {kev['action_due']}" if kev.get("action_due") else ""
+        _row("CISA KEV", paint("YES", BOLD, RED) + f" · listed {kev['date_added']}{due}")
     else:
         _row("CISA KEV", paint("no", GREY) + paint(" (not on the known-exploited list)", GREY))
 
@@ -262,11 +266,27 @@ def cve_card(nvd: dict, epss: dict | None, verdict: dict) -> None:
     if nvd.get("affected"):
         print()
         print("  " + paint("Affected", BOLD, WHITE))
-        prod_w = min(max(len(a["product"]) for a in nvd["affected"]) + 2, 36)
-        for a in nvd["affected"]:
+        affected = nvd["affected"]
+        shown = affected[:4]
+        prod_w = min(max(len(a["product"]) for a in shown) + 2, 34)
+        room = max(20, _cols() - 4 - prod_w)
+        for a in shown:
             versions = a["versions"]
-            shown = " · ".join(versions[:3]) + (paint(f" +{len(versions) - 3} more", GREY) if len(versions) > 3 else "")
-            print(f"    {_cell(a['product'], prod_w - 2).ljust(prod_w)}{shown}")
+            text, used = "", 0
+            for v in versions:
+                piece = v if not text else " · " + v
+                if len(text) + len(piece) > room - 10:
+                    break
+                text += piece
+                used += 1
+            more = paint(f" +{len(versions) - used} more", GREY) if used < len(versions) else ""
+            print(f"    {_cell(a['product'], prod_w - 2).ljust(prod_w)}{text}{more}")
+        rest = affected[len(shown):]
+        if rest:
+            from collections import Counter
+            vendors = Counter(a["vendor"] for a in rest).most_common(4)
+            summary = ", ".join(f"{v} {n}" for v, n in vendors)
+            print("    " + paint(f"+ {len(rest)} more products ({summary}{', ...' if len(vendors) == 4 else ''}). Full list with --json", GREY))
 
     if nvd.get("description"):
         print()
@@ -280,4 +300,4 @@ def cve_card(nvd: dict, epss: dict | None, verdict: dict) -> None:
             tags = r["tags"]
             tag = next((t for t in ("Patch", "Vendor Advisory", "Mitigation", "Exploit") if t in tags), None)
             tag = tag or (tags[0] if tags else "Link")
-            print(f"    {paint(_cell('[' + tag + ']', 23).ljust(24), GREY)}{r['url']}")
+            print(f"    {paint(_cell('[' + tag + ']', 19).ljust(20), GREY)}{_cell(r['url'], max(30, _cols() - 26))}")

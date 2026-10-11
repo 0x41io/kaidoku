@@ -30,7 +30,8 @@ Most CVE pages give you a wall of text and a CVSS number. kaidoku combines the t
 - **Attack vector in plain English:** `AV:N/AC:L/PR:N` becomes "Network (remote) · Low complexity · No privileges needed", with the dangerous parts highlighted
 - **AI briefing (optional, `--ai`):** Claude explains what it is, how an attack works (conceptually, never exploit code), who's affected, how urgent it is, what to do, and the business impact
 - **Tailored impact (`--context`):** describe your environment and the briefing tells you what it means for *you*
-- **Several CVEs at once:** pass multiple IDs
+- **Batch triage:** feed it a list, a scanner export, or piped input, and get a ranked table, most urgent first (KEV, then EPSS, then CVSS)
+- **Reads CVEs from any text:** Nessus/OpenVAS/Trivy exports, CSVs, emails, advisories. If a CVE ID is in there, kaidoku finds it
 - **Saved briefings** in `reports/`, and **JSON export**
 - No API keys needed for lookups
 
@@ -77,6 +78,15 @@ python kaidoku.py CVE-2021-44228 --ai --context "Small business, Java web apps o
 
 # Several CVEs, saved as JSON
 python kaidoku.py CVE-2024-3400 CVE-2023-4966 --json results.json
+
+# Triage every CVE in a scanner export or any text file
+python kaidoku.py --file scan-export.csv
+
+# Pipe CVEs in from another tool
+cat cves.txt | python kaidoku.py -
+
+# Batch, but show the full card for each CVE too
+python kaidoku.py --file scan-export.csv --cards
 
 # Plain output (also honors NO_COLOR)
 python kaidoku.py CVE-2021-44228 --no-color
@@ -135,7 +145,10 @@ kaidoku/
 
 ## Roadmap
 
-- [ ] Read CVEs from vulnerability scanner exports (Nessus, OpenVAS, Trivy)
+- [x] Batch triage from scanner exports, files, or piped input
+- [ ] Ransomware-campaign flag from the CISA KEV feed
+- [ ] CVE.org fallback for brand-new CVEs NVD hasn't analyzed yet
+- [ ] CVSS v4 vector explanations
 - [ ] Environment profiles saved to a file instead of `--context` every time
 - [ ] Web UI with PDF report export
 

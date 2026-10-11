@@ -6,6 +6,8 @@ Usage:
     python kaidoku.py CVE-2021-44228
     python kaidoku.py CVE-2021-44228 --ai
     python kaidoku.py CVE-2021-44228 --ai --context "We run Java apps on Tomcat behind a load balancer"
+    python kaidoku.py --file scan-report.txt
+    cat cves.txt | python kaidoku.py -
 """
 
 import argparse
@@ -22,22 +24,47 @@ import triage
 import ui
 from ui import fail, good, info, warn
 
-CVE_RE = re.compile(r"^CVE-\d{4}-\d{4,}$")
+# Finds CVE IDs anywhere in text: "CVE-2021-44228", "cve_2021_44228", inside CSV cells, URLs, etc.
+CVE_FIND = re.compile(r"CVE[-_]\d{4}[-_]\d{4,}", re.IGNORECASE)
+NVD_DELAY = 6  # seconds between NVD lookups without a key (~5 per 30s allowed)
 
 
-def clean_cve(raw: str) -> str:
-    c = raw.strip().upper().replace("_", "-")
-    if not CVE_RE.match(c):
-        raise ValueError(f"'{raw}' doesn't look like a CVE ID (expected e.g. CVE-2021-44228)")
-    return c
+def extract_ids(text: str) -> list[str]:
+    """Pull every CVE ID out of a blob of text, normalized, de-duplicated, in order."""
+    found = (m.upper().replace("_", "-") for m in CVE_FIND.findall(text))
+    return list(dict.fromkeys(found))
 
 
-def lookup(cve_id: str, args) -> dict | None:
-    info(f"Looking up {ui.paint(cve_id, ui.BOLD, ui.WHITE)} in the NVD...")
+def gather_ids(args) -> list[str]:
+    """Collect CVE IDs from the command line, --file, and stdin ('-')."""
+    # Anything typed on the command line that isn't a CVE is probably a typo, so say so.
+    for item in args.cves:
+        if item != "-" and not CVE_FIND.fullmatch(item.strip()):
+            raise ValueError(f"'{item}' doesn't look like a CVE ID (expected e.g. CVE-2021-44228)")
+
+    chunks = []
+    for item in args.cves:
+        if item == "-":
+            chunks.append(sys.stdin.read())
+        else:
+            chunks.append(item)
+    if args.file:
+        try:
+            with open(args.file, encoding="utf-8", errors="replace") as f:
+                chunks.append(f.read())
+        except OSError as e:
+            raise ValueError(f"Couldn't read {args.file}: {e.strerror}")
+
+    return extract_ids("\n".join(chunks))
+
+
+def lookup(cve_id: str, score: dict | None, args, show_card: bool) -> dict | None:
+    if show_card:
+        info(f"Looking up {ui.paint(cve_id, ui.BOLD, ui.WHITE)} in the NVD...")
     try:
         record = nvd.collect(cve_id)
     except RuntimeError as e:
-        fail(str(e))
+        fail(f"{cve_id}: {e}")
         if not os.environ.get("NVD_API_KEY"):
             warn("Without an NVD API key you're limited to ~5 lookups per 30s. A free key raises that (see README).")
         return None
@@ -45,14 +72,12 @@ def lookup(cve_id: str, args) -> dict | None:
         fail(f"{cve_id} wasn't found in the NVD. Check the ID, or it may be reserved and not published yet.")
         return None
 
-    try:
-        score = epss.collect(cve_id)
-    except RuntimeError as e:
-        warn(f"{e} (continuing without EPSS)")
-        score = None
-
     verdict = triage.verdict(record, score)
     result = {"cve": record, "epss": score, "verdict": verdict}
+
+    if not show_card:
+        good(f"{cve_id.ljust(16)}{ui.paint(verdict['label'], ui.GREY)}")
+        return result
 
     print()
     if record.get("status") == "Rejected":
@@ -88,7 +113,11 @@ def lookup(cve_id: str, args) -> dict | None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="0x41 / kaidoku - CVE intelligence, explained")
-    parser.add_argument("cves", nargs="+", metavar="CVE", help="one or more CVE IDs, e.g. CVE-2021-44228")
+    parser.add_argument("cves", nargs="*", metavar="CVE",
+                        help="one or more CVE IDs, e.g. CVE-2021-44228 (use - to read from stdin)")
+    parser.add_argument("-f", "--file", metavar="FILE",
+                        help="read CVE IDs from any text file: a list, a scanner export, a CSV...")
+    parser.add_argument("--cards", action="store_true", help="show the full card for every CVE in a batch")
     parser.add_argument("--ai", action="store_true", help="have Claude write a plain-English briefing (needs ANTHROPIC_API_KEY)")
     parser.add_argument("--context", metavar="TEXT", help="describe your environment so the AI tailors the impact (use with --ai)")
     parser.add_argument("--json", metavar="FILE", help="save results to a JSON file")
@@ -102,20 +131,49 @@ def main() -> int:
         warn("--context only affects the AI briefing; add --ai to use it.")
 
     try:
-        ids = list(dict.fromkeys(clean_cve(c) for c in args.cves))  # de-duplicate, keep order
+        ids = gather_ids(args)
     except ValueError as e:
         fail(str(e))
         return 1
+    if not ids:
+        fail("No CVE IDs found. Pass some on the command line, with --file, or pipe them in with -")
+        return 1
 
-    results = []
+    batch = len(ids) > 1
+    show_cards = not batch or args.cards or args.ai
+    if batch:
+        info(f"Found {len(ids)} CVEs.")
+        if args.ai and len(ids) > 5:
+            warn(f"--ai will make {len(ids)} Claude requests (one per CVE).")
+        if not os.environ.get("NVD_API_KEY"):
+            mins, secs = divmod((len(ids) - 1) * NVD_DELAY, 60)
+            warn(f"No NVD API key, so lookups are spaced out: about {mins}m {secs}s. A free key makes this ~10x faster.")
+        print()
+
+    # One EPSS request covers the whole batch
+    try:
+        scores = epss.collect_many(ids)
+    except RuntimeError as e:
+        warn(f"{e} (continuing without EPSS)")
+        scores = {}
+
+    results, missing = [], []
     for i, cve_id in enumerate(ids):
         if i:
-            print("\n" + ui.paint("═" * 60, ui.GREY) + "\n")
+            if show_cards:
+                print("\n" + ui.paint("═" * 60, ui.GREY) + "\n")
             if not os.environ.get("NVD_API_KEY"):
-                time.sleep(6)  # stay under the NVD's no-key rate limit
-        r = lookup(cve_id, args)
+                time.sleep(NVD_DELAY)  # stay under the NVD's no-key rate limit
+        r = lookup(cve_id, scores.get(cve_id), args, show_card=show_cards)
         if r:
             results.append(r)
+        else:
+            missing.append(cve_id)
+
+    if batch and results:
+        results.sort(key=triage.rank_key)
+        print()
+        ui.summary_table(results, missing)
 
     if args.json and results:
         with open(args.json, "w") as f:

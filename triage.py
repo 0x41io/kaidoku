@@ -33,3 +33,22 @@ def verdict(nvd: dict, epss: dict | None) -> dict:
                 "reason": "Serious if exploited, but low exploitation activity so far."}
     return {"level": "low", "label": "ROUTINE",
             "reason": "Low severity and low likelihood of exploitation. Handle with normal patching."}
+
+
+LEVEL_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+
+
+def rank_key(result: dict) -> tuple:
+    """Sort key for a batch: most urgent first.
+
+    Verdict level first, then KEV-listed before not, then higher EPSS,
+    then higher CVSS. Python sorts tuples item by item, and smaller sorts
+    first, so "bigger is worse" values are negated.
+    """
+    nvd = result["cve"]
+    return (
+        LEVEL_ORDER.get(result["verdict"]["level"], 9),
+        0 if nvd.get("kev") else 1,
+        -((result.get("epss") or {}).get("probability") or 0),
+        -((nvd.get("cvss") or {}).get("score") or 0),
+    )

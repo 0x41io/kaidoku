@@ -11,21 +11,34 @@ import requests
 from sources import USER_AGENT
 
 API_URL = "https://api.first.org/data/v1/epss"
+CHUNK = 50  # CVEs per request; keeps the URL a sane length
+
+
+def collect_many(cve_ids: list[str], timeout: int = 20) -> dict[str, dict]:
+    """Score many CVEs in as few requests as possible.
+
+    Returns {'CVE-2021-44228': {'probability': 0.94, 'percentile': 0.999, 'date': '...'}, ...}.
+    CVEs that EPSS hasn't scored are simply missing from the result.
+    """
+    scores = {}
+    for i in range(0, len(cve_ids), CHUNK):
+        batch = cve_ids[i:i + CHUNK]
+        params = {"cve": ",".join(batch), "limit": len(batch)}
+        try:
+            resp = requests.get(API_URL, params=params, headers={"User-Agent": USER_AGENT}, timeout=timeout)
+            resp.raise_for_status()
+            rows = resp.json().get("data", [])
+        except (requests.RequestException, ValueError) as e:
+            raise RuntimeError(f"EPSS lookup failed: {e}")
+        for row in rows:
+            scores[row["cve"]] = {
+                "probability": float(row["epss"]),
+                "percentile": float(row["percentile"]),
+                "date": row.get("date"),
+            }
+    return scores
 
 
 def collect(cve_id: str, timeout: int = 20) -> dict | None:
-    """Return {'probability': 0.94, 'percentile': 0.999, 'date': '...'} or None if unscored."""
-    try:
-        resp = requests.get(API_URL, params={"cve": cve_id}, headers={"User-Agent": USER_AGENT}, timeout=timeout)
-        resp.raise_for_status()
-        data = resp.json().get("data", [])
-    except (requests.RequestException, ValueError) as e:
-        raise RuntimeError(f"EPSS lookup failed: {e}")
-    if not data:
-        return None
-    row = data[0]
-    return {
-        "probability": float(row["epss"]),
-        "percentile": float(row["percentile"]),
-        "date": row.get("date"),
-    }
+    """Score a single CVE, or None if EPSS hasn't scored it."""
+    return collect_many([cve_id], timeout=timeout).get(cve_id)

@@ -301,3 +301,54 @@ def cve_card(nvd: dict, epss: dict | None, verdict: dict) -> None:
             tag = next((t for t in ("Patch", "Vendor Advisory", "Mitigation", "Exploit") if t in tags), None)
             tag = tag or (tags[0] if tags else "Link")
             print(f"    {paint(_cell('[' + tag + ']', 19).ljust(20), GREY)}{_cell(r['url'], max(30, _cols() - 26))}")
+
+
+# ---------------------------------------------------------------------------
+# Batch summary table (plain ANSI, works without rich)
+# ---------------------------------------------------------------------------
+
+_BADGE_W = len("HIGH PRIORITY")  # widest verdict label, so badges line up
+
+
+def summary_table(results: list[dict], missing: list[str]) -> None:
+    """One row per CVE, already sorted most-urgent first."""
+    print("  " + paint(f"Triage summary · {len(results)} CVE{'s' if len(results) != 1 else ''}, most urgent first", BOLD, WHITE))
+    print("  " + paint("─" * 60, GREY))
+
+    badge_w = _BADGE_W + (2 if ENABLED else 4)  # " LABEL " in color, "[ LABEL ]" without
+    head = f"  {'#':>3}  {'CVE'.ljust(16)} {'Verdict'.ljust(badge_w)}  {'CVSS':>4}  {'EPSS':>6}  {'KEV':<3}  Product"
+    print(paint(head, GREY))
+
+    prod_room = max(16, _cols() - len(head) + len("Product"))
+    for n, r in enumerate(results, 1):
+        nvd, epss, v = r["cve"], r.get("epss"), r["verdict"]
+
+        badge = _badge(v["label"].center(_BADGE_W), v["level"])
+
+        cvss = nvd.get("cvss") or {}
+        if cvss.get("score") is not None:
+            sev = (cvss.get("severity") or "").upper()
+            cvss_txt = paint(f"{cvss['score']:>4.1f}", _SEV_COLOR.get(sev, WHITE))
+        else:
+            cvss_txt = paint("   -", GREY)
+
+        if epss:
+            p = epss["probability"]
+            color = RED if p >= 0.1 else YELLOW if p >= 0.01 else GREY
+            prob = ">99.9%" if p >= 0.9995 else f"{p:.1%}" if p >= 0.01 else f"{p:.2%}"
+            epss_txt = paint(prob.rjust(6), color)
+        else:
+            epss_txt = paint("     -", GREY)
+
+        kev_txt = paint("YES", BOLD, RED) if nvd.get("kev") else paint("no ", GREY)
+
+        affected = nvd.get("affected") or []
+        product = affected[0]["product"] if affected else "-"
+        if len(affected) > 1:
+            product += f" (+{len(affected) - 1})"
+
+        print(f"  {n:>3}  {nvd['id'].ljust(16)} {badge}  {cvss_txt}  {epss_txt}  {kev_txt}  {_cell(product, prod_room)}")
+
+    if missing:
+        print()
+        warn("Not found or failed: " + ", ".join(missing))

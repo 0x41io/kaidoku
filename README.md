@@ -17,7 +17,7 @@ Most CVE pages give you a wall of text and a CVSS number. kaidoku combines the t
 
 | Signal | Question it answers | Source |
 |---|---|---|
-| **CISA KEV** | Is it being exploited in the wild right now? | NVD (CISA fields) |
+| **CISA KEV** | Is it being exploited in the wild right now? | [CISA](https://www.cisa.gov/known-exploited-vulnerabilities-catalog), cached 24h |
 | **EPSS** | How likely is exploitation in the next 30 days? | [FIRST.org](https://www.first.org/epss/) |
 | **CVSS** | How bad would it be if exploited? | [NVD](https://nvd.nist.gov/) |
 
@@ -30,6 +30,7 @@ Most CVE pages give you a wall of text and a CVSS number. kaidoku combines the t
 - **Attack vector in plain English:** `AV:N/AC:L/PR:N` becomes "Network (remote) · Low complexity · No privileges needed", with the dangerous parts highlighted
 - **AI briefing (optional, `--ai`):** Claude explains what it is, how an attack works (conceptually, never exploit code), who's affected, how urgent it is, what to do, and the business impact
 - **Tailored impact (`--context`):** describe your environment and the briefing tells you what it means for *you*
+- **Ransomware flag:** shows whether CISA knows a CVE is being used in ransomware campaigns, and ranks those first in a batch
 - **Batch triage:** feed it a list, a scanner export, or piped input, and get a ranked table, most urgent first (KEV, then EPSS, then CVSS)
 - **Reads CVEs from any text:** Nessus/OpenVAS/Trivy exports, CSVs, emails, advisories. If a CVE ID is in there, kaidoku finds it
 - **Saved briefings** in `reports/`, and **JSON export**
@@ -131,8 +132,10 @@ kaidoku/
 ├── ui.py                 # banner, summary card, report rendering
 ├── sources/
 │   ├── nvd.py            # NVD API 2.0 (+ CISA KEV fields)
-│   └── epss.py           # FIRST EPSS API
+│   ├── epss.py           # FIRST EPSS API
+│   └── kev.py            # CISA KEV catalog (ransomware flag, 24h cache)
 ├── reports/              # saved briefings (git-ignored)
+├── cache/                # local copy of the CISA KEV catalog (git-ignored)
 └── requirements.txt
 ```
 
@@ -146,7 +149,7 @@ kaidoku/
 ## Roadmap
 
 - [x] Batch triage from scanner exports, files, or piped input
-- [ ] Ransomware-campaign flag from the CISA KEV feed
+- [x] Ransomware-campaign flag from the CISA KEV feed
 - [ ] CVE.org fallback for brand-new CVEs NVD hasn't analyzed yet
 - [ ] CVSS v4 vector explanations
 - [ ] Environment profiles saved to a file instead of `--context` every time

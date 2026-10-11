@@ -17,6 +17,7 @@ env/
 
 # Output
 reports/
+cache/
 *.json
 
 # Editors / OS

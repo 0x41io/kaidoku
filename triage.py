@@ -17,8 +17,9 @@ def verdict(nvd: dict, epss: dict | None) -> dict:
     prob = (epss or {}).get("probability") or 0
 
     if nvd.get("kev"):
+        who = ", including by ransomware groups" if nvd["kev"].get("ransomware") else ""
         return {"level": "critical", "label": "PATCH NOW",
-                "reason": f"Actively exploited in the wild (on CISA's KEV list since {nvd['kev']['date_added']})."}
+                "reason": f"Actively exploited in the wild{who} (on CISA's KEV list since {nvd['kev']['date_added']})."}
     if not (nvd.get("cvss") or {}).get("score") and not epss:
         return {"level": "medium", "label": "NOT SCORED",
                 "reason": "No CVSS or EPSS score yet, so urgency is unknown. Read the description and check the vendor advisory."}
@@ -41,14 +42,15 @@ LEVEL_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3}
 def rank_key(result: dict) -> tuple:
     """Sort key for a batch: most urgent first.
 
-    Verdict level first, then KEV-listed before not, then higher EPSS,
-    then higher CVSS. Python sorts tuples item by item, and smaller sorts
-    first, so "bigger is worse" values are negated.
+    Verdict level first, then KEV with ransomware use, then KEV, then
+    higher EPSS, then higher CVSS. Python sorts tuples item by item, and
+    smaller sorts first, so "bigger is worse" values are negated.
     """
     nvd = result["cve"]
+    kev = nvd.get("kev") or {}
     return (
         LEVEL_ORDER.get(result["verdict"]["level"], 9),
-        0 if nvd.get("kev") else 1,
+        0 if kev.get("ransomware") else 1 if kev else 2,
         -((result.get("epss") or {}).get("probability") or 0),
         -((nvd.get("cvss") or {}).get("score") or 0),
     )

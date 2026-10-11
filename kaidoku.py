@@ -18,7 +18,7 @@ import sys
 import time
 from datetime import datetime
 
-from sources import epss, nvd
+from sources import epss, kev, nvd
 import analysis
 import triage
 import ui
@@ -58,7 +58,7 @@ def gather_ids(args) -> list[str]:
     return extract_ids("\n".join(chunks))
 
 
-def lookup(cve_id: str, score: dict | None, args, show_card: bool) -> dict | None:
+def lookup(cve_id: str, score: dict | None, catalog: dict, args, show_card: bool) -> dict | None:
     if show_card:
         info(f"Looking up {ui.paint(cve_id, ui.BOLD, ui.WHITE)} in the NVD...")
     try:
@@ -72,6 +72,7 @@ def lookup(cve_id: str, score: dict | None, args, show_card: bool) -> dict | Non
         fail(f"{cve_id} wasn't found in the NVD. Check the ID, or it may be reserved and not published yet.")
         return None
 
+    kev.apply(record, catalog)  # CISA's own KEV data: fresher, and includes ransomware use
     verdict = triage.verdict(record, score)
     result = {"cve": record, "epss": score, "verdict": verdict}
 
@@ -157,6 +158,18 @@ def main() -> int:
         warn(f"{e} (continuing without EPSS)")
         scores = {}
 
+    # CISA's KEV catalog: read from the local cache when it's under 24h old
+    try:
+        catalog, kev_status = kev.load()
+    except RuntimeError as e:
+        warn(f"{e} (falling back to the NVD's copy of KEV data, without ransomware info)")
+        catalog = {}
+    else:
+        if kev_status == "download":
+            info(f"Downloaded CISA's KEV catalog ({len(catalog):,} entries), cached for 24h.")
+        elif kev_status == "stale":
+            warn("Couldn't refresh CISA's KEV catalog, so using the last saved copy.")
+
     results, missing = [], []
     for i, cve_id in enumerate(ids):
         if i:
@@ -164,7 +177,7 @@ def main() -> int:
                 print("\n" + ui.paint("═" * 60, ui.GREY) + "\n")
             if not os.environ.get("NVD_API_KEY"):
                 time.sleep(NVD_DELAY)  # stay under the NVD's no-key rate limit
-        r = lookup(cve_id, scores.get(cve_id), args, show_card=show_cards)
+        r = lookup(cve_id, scores.get(cve_id), catalog, args, show_card=show_cards)
         if r:
             results.append(r)
         else:

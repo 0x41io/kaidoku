@@ -245,6 +245,10 @@ def cve_card(nvd: dict, epss: dict | None, verdict: dict) -> None:
     if kev:
         due = f" · US federal deadline {kev['action_due']}" if kev.get("action_due") else ""
         _row("CISA KEV", paint("YES", BOLD, RED) + f" · listed {kev['date_added']}{due}")
+        if kev.get("ransomware"):
+            _row("Ransomware", paint("KNOWN", BOLD, RED) + " · used in ransomware campaigns (per CISA)")
+        elif kev.get("ransomware") is False:
+            _row("Ransomware", paint("not known", GREY) + paint(" (no confirmed ransomware use)", GREY))
     else:
         _row("CISA KEV", paint("no", GREY) + paint(" (not on the known-exploited list)", GREY))
 
@@ -316,7 +320,7 @@ def summary_table(results: list[dict], missing: list[str]) -> None:
     print("  " + paint("─" * 60, GREY))
 
     badge_w = _BADGE_W + (2 if ENABLED else 4)  # " LABEL " in color, "[ LABEL ]" without
-    head = f"  {'#':>3}  {'CVE'.ljust(16)} {'Verdict'.ljust(badge_w)}  {'CVSS':>4}  {'EPSS':>6}  {'KEV':<3}  Product"
+    head = f"  {'#':>3}  {'CVE'.ljust(16)} {'Verdict'.ljust(badge_w)}  {'CVSS':>4}  {'EPSS':>6}  {'KEV':<3}  {'Ransom':<6}  Product"
     print(paint(head, GREY))
 
     prod_room = max(16, _cols() - len(head) + len("Product"))
@@ -340,14 +344,16 @@ def summary_table(results: list[dict], missing: list[str]) -> None:
         else:
             epss_txt = paint("     -", GREY)
 
-        kev_txt = paint("YES", BOLD, RED) if nvd.get("kev") else paint("no ", GREY)
+        kev = nvd.get("kev") or {}
+        kev_txt = paint("YES", BOLD, RED) if kev else paint("no ", GREY)
+        ransom_txt = paint("KNOWN ", BOLD, RED) if kev.get("ransomware") else paint("-     ", GREY)
 
         affected = nvd.get("affected") or []
         product = affected[0]["product"] if affected else "-"
         if len(affected) > 1:
             product += f" (+{len(affected) - 1})"
 
-        print(f"  {n:>3}  {nvd['id'].ljust(16)} {badge}  {cvss_txt}  {epss_txt}  {kev_txt}  {_cell(product, prod_room)}")
+        print(f"  {n:>3}  {nvd['id'].ljust(16)} {badge}  {cvss_txt}  {epss_txt}  {kev_txt}  {ransom_txt}  {_cell(product, prod_room)}")
 
     if missing:
         print()

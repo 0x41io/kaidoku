@@ -59,7 +59,7 @@ def gather_ids(args) -> list[str]:
     return extract_ids("\n".join(chunks))
 
 
-def lookup(cve_id: str, score: dict | None, catalog: dict, args, show_card: bool) -> dict | None:
+def lookup(cve_id: str, score: dict | None, catalog: dict, profile: dict | None, args, show_card: bool) -> dict | None:
     if show_card:
         info(f"Looking up {ui.paint(cve_id, ui.BOLD, ui.WHITE)} in the NVD...")
     try:
@@ -75,7 +75,8 @@ def lookup(cve_id: str, score: dict | None, catalog: dict, args, show_card: bool
 
     kev.apply(record, catalog)  # CISA's own KEV data: fresher, and includes ransomware use
     verdict = triage.verdict(record, score)
-    result = {"cve": record, "epss": score, "verdict": verdict}
+    stack = envprofile.match(profile, record.get("affected") or [])
+    result = {"cve": record, "epss": score, "verdict": verdict, "stack": stack}
 
     if not show_card:
         good(f"{cve_id.ljust(16)}{ui.paint(verdict['label'], ui.GREY)}")
@@ -85,7 +86,7 @@ def lookup(cve_id: str, score: dict | None, catalog: dict, args, show_card: bool
     if record.get("status") == "Rejected":
         warn(f"{cve_id} is REJECTED in the NVD (withdrawn or a duplicate). Details below are for reference only.")
         print()
-    ui.cve_card(record, score, verdict)
+    ui.cve_card(record, score, verdict, stack)
 
     if args.ai:
         print()
@@ -187,7 +188,7 @@ def main() -> int:
                 print("\n" + ui.paint("═" * 60, ui.GREY) + "\n")
             if not os.environ.get("NVD_API_KEY"):
                 time.sleep(NVD_DELAY)  # stay under the NVD's no-key rate limit
-        r = lookup(cve_id, scores.get(cve_id), catalog, args, show_card=show_cards)
+        r = lookup(cve_id, scores.get(cve_id), catalog, profile, args, show_card=show_cards)
         if r:
             results.append(r)
         else:

@@ -56,3 +56,38 @@ def load(path: str | None = None) -> dict | None:
         "software": [s.strip().lower() for s in software if s.strip()],
         "path": path,
     }
+
+
+def match(profile: dict | None, affected: list[dict]) -> dict | None:
+    """Check a CVE's affected products against the software in your profile.
+
+    Returns None if there's no profile (or it lists no software), otherwise:
+      {"status": "match",   "products": ["apache tomcat"]}  # you run it
+      {"status": "no",      "products": []}                 # nothing you listed
+      {"status": "unknown", "products": []}                 # NVD hasn't listed products yet
+    """
+    if not profile or not profile["software"]:
+        return None
+    if not affected:
+        return {"status": "unknown", "products": []}
+
+    hits = []
+    for a in affected:
+        for name in profile["software"]:
+            if _same_software(name, a["product"]):
+                hits.append(a["product"])
+                break  # one match is enough for this product
+    return {"status": "match" if hits else "no", "products": hits}
+
+
+def _same_software(name: str, product: str) -> bool:
+    """Does your name appear as whole words inside the NVD product name?
+
+    "tomcat"          vs "apache tomcat"             -> True
+    "windows 11"      vs "microsoft windows 11 22h2" -> True
+    "java"            vs "oracle javascript engine"  -> False (whole words only)
+    """
+    want = name.split()
+    words = product.split()
+    n = len(want)
+    return any(words[i:i + n] == want for i in range(len(words) - n + 1))

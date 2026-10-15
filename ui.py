@@ -212,7 +212,7 @@ def _wrap(text: str, indent: str) -> str:
     return "\n".join(indent + line for line in _textwrap.wrap(text, width))
 
 
-def cve_card(nvd: dict, epss: dict | None, verdict: dict) -> None:
+def cve_card(nvd: dict, epss: dict | None, verdict: dict, stack: dict | None = None) -> None:
     title = paint(nvd["id"], BOLD, WHITE)
     if nvd.get("kev") and nvd["kev"].get("name"):
         title += paint("  ·  " + nvd["kev"]["name"], WHITE)
@@ -220,6 +220,16 @@ def cve_card(nvd: dict, epss: dict | None, verdict: dict) -> None:
     print("  " + paint("─" * 60, GREY))
     print(f"  {_badge(verdict['label'], verdict['level'])}  {verdict['reason']}")
     print()
+    if stack:
+        if stack["status"] == "match":
+            names = ", ".join(stack["products"][:3])
+            more = f" +{len(stack['products']) - 3} more" if len(stack["products"]) > 3 else ""
+            _row("Your stack", paint("IN YOUR STACK", BOLD, RED) + f" · {names}{more}")
+        elif stack["status"] == "no":
+            _row("Your stack", paint("not listed", GREY) + paint(" (nothing in your profile matches by name)", GREY))
+        else:
+            _row("Your stack", paint("unknown", YELLOW) + paint(" (the NVD hasn't listed affected products yet)", GREY))
+        print()
 
     cvss = nvd.get("cvss")
     if cvss and cvss.get("score") is not None:

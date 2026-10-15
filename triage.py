@@ -37,19 +37,22 @@ def verdict(nvd: dict, epss: dict | None) -> dict:
 
 
 LEVEL_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+STACK_ORDER = {"match": 0, "unknown": 1}  # anything else ("no", or no profile) sorts as 2
 
 
 def rank_key(result: dict) -> tuple:
     """Sort key for a batch: most urgent first.
 
-    Verdict level first, then KEV with ransomware use, then KEV, then
-    higher EPSS, then higher CVSS. Python sorts tuples item by item, and
+    Verdict level first, then whether it's in your stack (yes, unknown, no),
+    then KEV with ransomware use, then KEV, then higher EPSS, then higher CVSS. Python sorts tuples item by item, and
     smaller sorts first, so "bigger is worse" values are negated.
     """
     nvd = result["cve"]
     kev = nvd.get("kev") or {}
+    stack = result.get("stack") or {}
     return (
         LEVEL_ORDER.get(result["verdict"]["level"], 9),
+        STACK_ORDER.get(stack.get("status"), 2),
         0 if kev.get("ransomware") else 1 if kev else 2,
         -((result.get("epss") or {}).get("probability") or 0),
         -((nvd.get("cvss") or {}).get("score") or 0),

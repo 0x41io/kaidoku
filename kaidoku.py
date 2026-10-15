@@ -20,6 +20,7 @@ from datetime import datetime
 
 from sources import epss, kev, nvd
 import analysis
+import envprofile
 import triage
 import ui
 from ui import fail, good, info, warn
@@ -121,6 +122,8 @@ def main() -> int:
     parser.add_argument("--cards", action="store_true", help="show the full card for every CVE in a batch")
     parser.add_argument("--ai", action="store_true", help="have Claude write a plain-English briefing (needs ANTHROPIC_API_KEY)")
     parser.add_argument("--context", metavar="TEXT", help="describe your environment so the AI tailors the impact (use with --ai)")
+    parser.add_argument("--profile", metavar="FILE",
+                        help="your environment profile (default: ~/.kaidoku/profile.json, if it exists)")
     parser.add_argument("--json", metavar="FILE", help="save results to a JSON file")
     parser.add_argument("--no-color", action="store_true", help="plain output (also respects NO_COLOR)")
     args = parser.parse_args()
@@ -130,7 +133,14 @@ def main() -> int:
 
     if args.context and not args.ai:
         warn("--context only affects the AI briefing; add --ai to use it.")
-
+    try:
+        profile = envprofile.load(args.profile)
+    except ValueError as e:
+        fail(str(e))
+        return 1
+    if profile:
+        info(f"Using profile {ui.paint(profile['name'], ui.BOLD, ui.WHITE)} "
+             f"({len(profile['software'])} products listed)")
     try:
         ids = gather_ids(args)
     except ValueError as e:

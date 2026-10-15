@@ -1,0 +1,11 @@
+{
+  "name": "example-shop",
+  "description": "Small business. Internet-facing Java web apps on Apache Tomcat behind nginx. Windows laptops, FortiGate firewall at the edge.",
+  "software": [
+    "apache tomcat",
+    "apache log4j",
+    "nginx",
+    "fortinet fortios",
+    "microsoft windows 11"
+  ]
+}

@@ -19,7 +19,7 @@ env/
 reports/
 cache/
 *.json
-
+!profile.example.json
 # Editors / OS
 .vscode/
 .idea/

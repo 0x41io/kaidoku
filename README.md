@@ -29,7 +29,7 @@ Most CVE pages give you a wall of text and a CVSS number. kaidoku combines the t
 - **Urgency verdict without AI:** `PATCH NOW` / `HIGH PRIORITY` / `SCHEDULE` / `ROUTINE`, based on KEV first, then EPSS, then CVSS
 - **Attack vector in plain English:** `AV:N/AC:L/PR:N` becomes "Network (remote) · Low complexity · No privileges needed", with the dangerous parts highlighted
 - **AI briefing (optional, `--ai`):** Claude explains what it is, how an attack works (conceptually, never exploit code), who's affected, how urgent it is, what to do, and the business impact
-- **Tailored impact (`--context`):** describe your environment and the briefing tells you what it means for *you*
+- **Environment profiles:** describe what you run once, and kaidoku flags CVEs that hit your software (`IN YOUR STACK`), ranks them first in a batch, and tailors AI briefings to your setup. The matching works without AI. `--context` still overrides the description for a single run
 - **Ransomware flag:** shows whether CISA knows a CVE is being used in ransomware campaigns, and ranks those first in a batch
 - **Batch triage:** feed it a list, a scanner export, or piped input, and get a ranked table, most urgent first (KEV, then EPSS, then CVSS)
 - **Reads CVEs from any text:** Nessus/OpenVAS/Trivy exports, CSVs, emails, advisories. If a CVE ID is in there, kaidoku finds it
@@ -92,7 +92,40 @@ python kaidoku.py --file scan-export.csv --cards
 # Plain output (also honors NO_COLOR)
 python kaidoku.py CVE-2021-44228 --no-color
 ```
+### Environment profile
 
+Tell kaidoku what you run once, and every lookup checks the CVE against it.
+
+```bash
+mkdir -p ~/.kaidoku
+cp profile.example.json ~/.kaidoku/profile.json
+nano ~/.kaidoku/profile.json
+```
+
+```json
+{
+  "name": "acme-prod",
+  "description": "Small business. Internet-facing Java web apps on Tomcat behind nginx.",
+  "software": ["apache tomcat", "apache log4j", "nginx", "fortinet fortios"]
+}
+```
+
+- **`software`**: product names as the NVD writes them (vendor + product, like `apache tomcat`). Shorter works too: `tomcat` matches `apache tomcat`. Matching is by whole words, so `java` won't match `javascript`.
+- **`description`**: your setup in plain English. `--ai` uses it to tailor the briefing.
+
+kaidoku loads `~/.kaidoku/profile.json` automatically if it exists. Use a different file with `--profile FILE`.
+
+With a profile, the card gets a **Your stack** line and batch tables get a **Stack** column:
+
+| Card | Table | Meaning |
+|---|---|---|
+| `IN YOUR STACK` | `YES` | an affected product matches your list |
+| `not listed` | `-` | nothing in your list matches |
+| `unknown` | `?` | the NVD hasn't listed affected products yet |
+
+In a batch, in-stack CVEs rank first *within* each urgency level, so a PATCH NOW you don't run still outranks a SCHEDULE you do.
+
+Your profile lives in your home folder, not the repo, because it describes what you run and what's exposed. Keep it private.
 ### Example card
 
 ```
@@ -129,6 +162,7 @@ kaidoku/
 ├── kaidoku.py            # CLI entry point
 ├── triage.py             # rule-based urgency verdict (KEV > EPSS > CVSS)
 ├── analysis.py           # Claude briefing
+├── envprofile.py         # environment profile + stack matching
 ├── ui.py                 # banner, summary card, report rendering
 ├── sources/
 │   ├── nvd.py            # NVD API 2.0 (+ CISA KEV fields)
@@ -136,12 +170,13 @@ kaidoku/
 │   └── kev.py            # CISA KEV catalog (ransomware flag, 24h cache)
 ├── reports/              # saved briefings (git-ignored)
 ├── cache/                # local copy of the CISA KEV catalog (git-ignored)
+├── profile.example.json  # example environment profile
 └── requirements.txt
 ```
 
 ## Limitations
 
-- The urgency verdict is a starting point. What matters most is whether the affected software is actually in your environment.
+- Stack matching is by product name only, without version checks. `IN YOUR STACK` means you run that software, not that your version is vulnerable. Confirm the installed version against the affected ranges.
 - New CVEs are often "Awaiting Analysis" in the NVD, with no CVSS score or product list yet.
 - EPSS scores update daily and aren't available for every CVE.
 - AI briefings are only as good as the public data. Always confirm fixed versions in the vendor's advisory.
@@ -152,7 +187,8 @@ kaidoku/
 - [x] Ransomware-campaign flag from the CISA KEV feed
 - [ ] CVE.org fallback for brand-new CVEs NVD hasn't analyzed yet
 - [ ] CVSS v4 vector explanations
-- [ ] Environment profiles saved to a file instead of `--context` every time
+- [x] Environment profiles saved to a file instead of `--context` every time
+- [ ] Version-aware stack matching
 - [ ] Web UI with PDF report export
 
 ## License

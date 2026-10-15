@@ -90,9 +90,11 @@ def lookup(cve_id: str, score: dict | None, catalog: dict, profile: dict | None,
 
     if args.ai:
         print()
+                # --context wins for this run; otherwise use the profile's description
+        context = args.context or (profile or {}).get("description") or None
         info("Asking Claude to explain it...")
         try:
-            briefing, model = analysis.explain(record, score, verdict, args.context)
+            briefing, model = analysis.explain(record, score, verdict, context, stack)
         except Exception as e:  # missing key, network, API errors
             fail(f"AI briefing failed: {e}")
         else:
@@ -103,7 +105,7 @@ def lookup(cve_id: str, score: dict | None, catalog: dict, profile: dict | None,
             header = (
                 f"# kaidoku briefing: {cve_id}\n\n"
                 f"*Generated {datetime.now():%Y-%m-%d %H:%M} · verdict: {verdict['label']} · "
-                f"model: {model}{' · tailored to provided context' if args.context else ''}*\n\n"
+                f"model: {model}{' · tailored to your environment' if context else ''}*\n\n"
             )
             with open(path, "w") as f:
                 f.write(header + briefing + "\n")

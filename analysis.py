@@ -16,7 +16,11 @@ You get: the NVD record (description, CVSS, weakness/CWE, affected products, \
 references), the EPSS score (probability of exploitation in the next 30 days), \
 whether the CVE is on CISA's Known Exploited Vulnerabilities (KEV) list, and a \
 rule-based urgency verdict. You may also get a description of the reader's \
-environment.
+environment, and a "your_stack" result: whether the CVE's affected products \
+match software the reader listed ("match", "no", or "unknown" when the NVD \
+hasn't listed products yet). It's a name match without version checks, so \
+treat "match" as "probably runs this software" and "no" as "not in what they \
+listed", not as proof either way.
 
 Write Markdown with these sections:
 ## 1. What it is
@@ -66,7 +70,8 @@ def pick_model(client) -> str:
     return models[0]
 
 
-def explain(nvd: dict, epss: dict | None, verdict: dict, context: str | None = None) -> tuple[str, str]:
+def explain(nvd: dict, epss: dict | None, verdict: dict, context: str | None = None,
+            stack: dict | None = None) -> tuple[str, str]:
     """Send CVE data to Claude. Returns (markdown_briefing, model_used)."""
     if not os.environ.get("ANTHROPIC_API_KEY"):
         raise RuntimeError("ANTHROPIC_API_KEY is not set (see README for the API key step).")
@@ -81,7 +86,9 @@ def explain(nvd: dict, epss: dict | None, verdict: dict, context: str | None = N
         "cvss_vector_plain_english": dict(nvd.get("vector_explained") or []),
         "epss": epss,
         "rule_based_verdict": verdict,
-    }
+    }    
+    if stack:
+        payload["your_stack"] = stack
     content = "CVE data (JSON):\n```json\n" + json.dumps(payload, indent=2) + "\n```"
     if context:
         content += f"\n\nReader's environment (tailor sections 4-6 to this):\n{context}"

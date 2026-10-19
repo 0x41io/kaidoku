@@ -212,7 +212,7 @@ def _wrap(text: str, indent: str) -> str:
     return "\n".join(indent + line for line in _textwrap.wrap(text, width))
 
 
-def cve_card(nvd: dict, epss: dict | None, verdict: dict, stack: dict | None = None) -> None:
+def cve_card(nvd: dict, epss: dict | None, verdict: dict, stack: dict | None = None, found_on: list | None = None) -> None:
     title = paint(nvd["id"], BOLD, WHITE)
     if nvd.get("kev") and nvd["kev"].get("name"):
         title += paint("  ·  " + nvd["kev"]["name"], WHITE)
@@ -231,6 +231,14 @@ def cve_card(nvd: dict, epss: dict | None, verdict: dict, stack: dict | None = N
             _row("Your stack", paint("unknown", YELLOW) + paint(" (the NVD hasn't listed affected products yet)", GREY))
         print()
 
+    if found_on:
+        for i, loc in enumerate(found_on[:3]):
+            hosts = ", ".join(loc["hosts"][:3]) or "no hostname"
+            _row("Found on" if i == 0 else "", f"{paint(loc['ip'], BOLD, WHITE)}  {hosts}")
+        if len(found_on) > 3:
+            _row("", paint(f"+{len(found_on) - 3} more IPs (full list with --json)", GREY))
+        _row("", paint("(from monomi · Shodan InternetDB)", GREY))
+        print()
     cvss = nvd.get("cvss")
     if cvss and cvss.get("score") is not None:
         sev = (cvss.get("severity") or "").upper()
@@ -331,8 +339,11 @@ def summary_table(results: list[dict], missing: list[str]) -> None:
 
     badge_w = _BADGE_W + (2 if ENABLED else 4)  # " LABEL " in color, "[ LABEL ]" without
     has_stack = any(r.get("stack") for r in results)  # only show the column when a profile is in use
+    has_found = any(r.get("found_on") for r in results)  # only when CVEs came from monomi
+    found_w = 30
+    found_head = f"{'Found on'.ljust(found_w)}  " if has_found else ""
     stack_head = f"{'Stack':<5}  " if has_stack else ""
-    head = f"  {'#':>3}  {'CVE'.ljust(16)} {'Verdict'.ljust(badge_w)}  {'CVSS':>4}  {'EPSS':>6}  {'KEV':<3}  {'Ransom':<6}  {stack_head}Product"
+    head = f"  {'#':>3}  {'CVE'.ljust(16)} {'Verdict'.ljust(badge_w)}  {'CVSS':>4}  {'EPSS':>6}  {'KEV':<3}  {'Ransom':<6}  {stack_head}{found_head}Product"
     print(paint(head, GREY))
 
     prod_room = max(16, _cols() - len(head) + len("Product"))
@@ -368,12 +379,22 @@ def summary_table(results: list[dict], missing: list[str]) -> None:
                 stack_txt = paint("?    ", YELLOW) + "  "
             else:
                 stack_txt = paint("-    ", GREY) + "  "
+        found_txt = ""
+        if has_found:
+            locs = r.get("found_on") or []
+            if locs:
+                where = locs[0]["hosts"][0] if locs[0]["hosts"] else locs[0]["ip"]
+                if len(locs) > 1:
+                    where += f" (+{len(locs) - 1})"
+                found_txt = _cell(where, found_w).ljust(found_w) + "  "
+            else:
+                found_txt = paint("-".ljust(found_w), GREY) + "  "
         affected = nvd.get("affected") or []
         product = affected[0]["product"] if affected else "-"
         if len(affected) > 1:
             product += f" (+{len(affected) - 1})"
 
-        print(f"  {n:>3}  {nvd['id'].ljust(16)} {badge}  {cvss_txt}  {epss_txt}  {kev_txt}  {ransom_txt}  {stack_txt}{_cell(product, prod_room)}")
+        print(f"  {n:>3}  {nvd['id'].ljust(16)} {badge}  {cvss_txt}  {epss_txt}  {kev_txt}  {ransom_txt}  {stack_txt}{found_txt}{_cell(product, prod_room)}")
 
     if missing:
         print()

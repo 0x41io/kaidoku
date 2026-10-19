@@ -88,7 +88,7 @@ def lookup(cve_id: str, score: dict | None, catalog: dict, profile: dict | None,
     if record.get("status") == "Rejected":
         warn(f"{cve_id} is REJECTED in the NVD (withdrawn or a duplicate). Details below are for reference only.")
         print()
-    ui.cve_card(record, score, verdict, stack)
+    ui.cve_card(record, score, verdict, stack, found_on)
 
     if args.ai:
         print()

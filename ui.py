@@ -6,6 +6,7 @@ when output isn't a terminal (piping to a file) or when NO_COLOR is set.
 """
 
 import os
+import re
 import sys
 
 from sources import VERSION
@@ -40,6 +41,17 @@ RED_RAMP = [rgb(255, 70, 85), rgb(255, 45, 62), rgb(235, 25, 45),
 
 def paint(text: str, *codes: str) -> str:
     return "".join(codes) + text + RESET if ENABLED else text
+
+_CONTROL = re.compile(r"[\x00-\x08\x0b-\x1f\x7f-\x9f]")
+
+
+def safe(text: str) -> str:
+    """Neutralize control characters in untrusted text before printing it.
+
+    NVD/CISA/Shodan text can contain escape codes that recolor, hide or
+    rewrite lines in your terminal.
+    """
+    return _CONTROL.sub("?", str(text))
 
 
 LOGO = [
@@ -190,6 +202,7 @@ _VERDICT_STYLE = {
 
 
 def _cell(text: str, width: int) -> str:
+    text = safe(text)
     return text if len(text) <= width else text[: width - 1] + "…"
 
 
@@ -209,13 +222,13 @@ def _cols() -> int:
 
 def _wrap(text: str, indent: str) -> str:
     width = max(40, _cols() - len(indent) - 2)
-    return "\n".join(indent + line for line in _textwrap.wrap(text, width))
+    return "\n".join(indent + line for line in _textwrap.wrap(safe(text), width))
 
 
 def cve_card(nvd: dict, epss: dict | None, verdict: dict, stack: dict | None = None, found_on: list | None = None) -> None:
     title = paint(nvd["id"], BOLD, WHITE)
     if nvd.get("kev") and nvd["kev"].get("name"):
-        title += paint("  ·  " + nvd["kev"]["name"], WHITE)
+        title += paint("  ·  " + safe(nvd["kev"]["name"]), WHITE)
     print("  " + title)
     print("  " + paint("─" * 60, GREY))
     print(f"  {_badge(verdict['label'], verdict['level'])}  {verdict['reason']}")
@@ -233,8 +246,8 @@ def cve_card(nvd: dict, epss: dict | None, verdict: dict, stack: dict | None = N
 
     if found_on:
         for i, loc in enumerate(found_on[:3]):
-            hosts = ", ".join(loc["hosts"][:3]) or "no hostname"
-            _row("Found on" if i == 0 else "", f"{paint(loc['ip'], BOLD, WHITE)}  {hosts}")
+            hosts = safe(", ".join(loc["hosts"][:3])) or "no hostname"
+            _row("Found on" if i == 0 else "", f"{paint(safe(loc['ip']), BOLD, WHITE)}  {hosts}")
         if len(found_on) > 3:
             _row("", paint(f"+{len(found_on) - 3} more IPs (full list with --json)", GREY))
         _row("", paint("(from monomi · Shodan InternetDB)", GREY))

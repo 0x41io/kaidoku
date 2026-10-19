@@ -96,7 +96,7 @@ def lookup(cve_id: str, score: dict | None, catalog: dict, profile: dict | None,
         context = args.context or (profile or {}).get("description") or None
         info("Asking Claude to explain it...")
         try:
-            briefing, model = analysis.explain(record, score, verdict, context, stack)
+            briefing, model = analysis.explain(record, score, verdict, context, stack, found_on)
         except Exception as e:  # missing key, network, API errors
             fail(f"AI briefing failed: {e}")
         else:

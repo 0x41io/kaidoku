@@ -22,6 +22,13 @@ hasn't listed products yet). It's a name match without version checks, so \
 treat "match" as "probably runs this software" and "no" as "not in what they \
 listed", not as proof either way.
 
+You may also get "found_on": the IPs and hostnames where 0x41's recon tool \
+monomi saw this CVE, via Shodan InternetDB. Shodan matches CVEs from \
+software version banners, so treat it as "this server's banner matches a \
+vulnerable version", not confirmed exploitability. When present, name these \
+hosts in sections 3, 4 and 6, and in section 5 suggest verifying the actual \
+installed version on each one.
+
 Write Markdown with these sections:
 ## 1. What it is
 2-4 sentences in plain English: what kind of flaw, in what software, and what \
@@ -71,7 +78,7 @@ def pick_model(client) -> str:
 
 
 def explain(nvd: dict, epss: dict | None, verdict: dict, context: str | None = None,
-            stack: dict | None = None) -> tuple[str, str]:
+            stack: dict | None = None, found_on: list | None = None) -> tuple[str, str]:
     """Send CVE data to Claude. Returns (markdown_briefing, model_used)."""
     if not os.environ.get("ANTHROPIC_API_KEY"):
         raise RuntimeError("ANTHROPIC_API_KEY is not set (see README for the API key step).")
@@ -89,6 +96,8 @@ def explain(nvd: dict, epss: dict | None, verdict: dict, context: str | None = N
     }    
     if stack:
         payload["your_stack"] = stack
+    if found_on:
+        payload["found_on"] = found_on
     content = "CVE data (JSON):\n```json\n" + json.dumps(payload, indent=2) + "\n```"
     if context:
         content += f"\n\nReader's environment (tailor sections 4-6 to this):\n{context}"

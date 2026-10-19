@@ -33,6 +33,7 @@ Most CVE pages give you a wall of text and a CVSS number. kaidoku combines the t
 - **Ransomware flag:** shows whether CISA knows a CVE is being used in ransomware campaigns, and ranks those first in a batch
 - **Batch triage:** feed it a list, a scanner export, or piped input, and get a ranked table, most urgent first (KEV, then EPSS, then CVSS)
 - **Reads CVEs from any text:** Nessus/OpenVAS/Trivy exports, CSVs, emails, advisories. If a CVE ID is in there, kaidoku finds it
+- **Reads [mønømi](https://github.com/0x41io/monomi) scans (`--monomi FILE`):** feed it monomi's `--json` output and every CVE keeps the host and IP it was found on. The card gets a **Found on** line, batch tables get a **Found on** column, and AI briefings name the affected hosts and suggest verifying each one. CDN edge IPs are skipped, same as in monomi
 - **Saved briefings** in `reports/`, and **JSON export**
 - No API keys needed for lookups
 
@@ -92,6 +93,21 @@ python kaidoku.py --file scan-export.csv --cards
 # Plain output (also honors NO_COLOR)
 python kaidoku.py CVE-2021-44228 --no-color
 ```
+### From monomi (0x41 pipeline)
+
+Run a recon scan with [mønømi](https://github.com/0x41io/monomi), then triage what it found, with each CVE tied to the server it's on:
+
+```bash
+# in the monomi folder: recon + Shodan ports/CVEs, saved as JSON
+python monomi.py example.com --ports --json scan.json
+
+# in the kaidoku folder: triage those CVEs with their locations
+python kaidoku.py --monomi ../monomi/scan.json
+python kaidoku.py --monomi ../monomi/scan.json --ai    # one briefing per CVE
+```
+
+monomi's CVEs come from Shodan InternetDB, which matches them from software version banners. A **Found on** host means "this server's banner matches a vulnerable version", not confirmed exploitability. Verify the installed version on each host.
+
 ### Environment profile
 
 Tell kaidoku what you run once, and every lookup checks the CVE against it.
@@ -162,6 +178,7 @@ kaidoku/
 ├── kaidoku.py            # CLI entry point
 ├── triage.py             # rule-based urgency verdict (KEV > EPSS > CVSS)
 ├── analysis.py           # Claude briefing
+├── monomi_import.py      # reads monomi --json (CVEs + where they were found)
 ├── envprofile.py         # environment profile + stack matching
 ├── ui.py                 # banner, summary card, report rendering
 ├── sources/
@@ -177,6 +194,7 @@ kaidoku/
 ## Limitations
 
 - Stack matching is by product name only, without version checks. `IN YOUR STACK` means you run that software, not that your version is vulnerable. Confirm the installed version against the affected ranges.
+- `--monomi` locations come from Shodan's banner-based CVE matching, which can't see distro backports or configuration. Treat **Found on** as "worth checking", not "confirmed vulnerable".
 - New CVEs are often "Awaiting Analysis" in the NVD, with no CVSS score or product list yet.
 - EPSS scores update daily and aren't available for every CVE.
 - AI briefings are only as good as the public data. Always confirm fixed versions in the vendor's advisory.
@@ -188,6 +206,7 @@ kaidoku/
 - [ ] CVE.org fallback for brand-new CVEs NVD hasn't analyzed yet
 - [ ] CVSS v4 vector explanations
 - [x] Environment profiles saved to a file instead of `--context` every time
+- [x] Read monomi scan results (`--monomi`), keeping each CVE's host and IP
 - [ ] Version-aware stack matching
 - [ ] Web UI with PDF report export
 

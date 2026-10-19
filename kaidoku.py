@@ -21,6 +21,7 @@ from datetime import datetime
 from sources import epss, kev, nvd
 import analysis
 import envprofile
+import monomi_import
 import triage
 import ui
 from ui import fail, good, info, warn
@@ -59,7 +60,8 @@ def gather_ids(args) -> list[str]:
     return extract_ids("\n".join(chunks))
 
 
-def lookup(cve_id: str, score: dict | None, catalog: dict, profile: dict | None, args, show_card: bool) -> dict | None:
+def lookup(cve_id: str, score: dict | None, catalog: dict, profile: dict | None, args, show_card: bool,
+           found_on: list | None = None) -> dict | None:
     if show_card:
         info(f"Looking up {ui.paint(cve_id, ui.BOLD, ui.WHITE)} in the NVD...")
     try:
@@ -76,7 +78,7 @@ def lookup(cve_id: str, score: dict | None, catalog: dict, profile: dict | None,
     kev.apply(record, catalog)  # CISA's own KEV data: fresher, and includes ransomware use
     verdict = triage.verdict(record, score)
     stack = envprofile.match(profile, record.get("affected") or [])
-    result = {"cve": record, "epss": score, "verdict": verdict, "stack": stack}
+    result = {"cve": record, "epss": score, "verdict": verdict, "stack": stack, "found_on": found_on or []}
 
     if not show_card:
         good(f"{cve_id.ljust(16)}{ui.paint(verdict['label'], ui.GREY)}")
@@ -122,6 +124,8 @@ def main() -> int:
                         help="one or more CVE IDs, e.g. CVE-2021-44228 (use - to read from stdin)")
     parser.add_argument("-f", "--file", metavar="FILE",
                         help="read CVE IDs from any text file: a list, a scanner export, a CSV...")
+    parser.add_argument("--monomi", metavar="FILE",
+                        help="read CVEs from a monomi --json file, keeping the host/IP each was found on")
     parser.add_argument("--cards", action="store_true", help="show the full card for every CVE in a batch")
     parser.add_argument("--ai", action="store_true", help="have Claude write a plain-English briefing (needs ANTHROPIC_API_KEY)")
     parser.add_argument("--context", metavar="TEXT", help="describe your environment so the AI tailors the impact (use with --ai)")
@@ -149,6 +153,15 @@ def main() -> int:
     except ValueError as e:
         fail(str(e))
         return 1
+    found_on = {}
+    if args.monomi:
+        try:
+            target, monomi_ids, found_on = monomi_import.load(args.monomi)
+        except ValueError as e:
+            fail(str(e))
+            return 1
+        info(f"Read {len(monomi_ids)} CVE(s) from monomi's scan of {ui.paint(target, ui.BOLD, ui.WHITE)}")
+        ids = list(dict.fromkeys(ids + monomi_ids))
     if not ids:
         fail("No CVE IDs found. Pass some on the command line, with --file, or pipe them in with -")
         return 1
@@ -190,7 +203,7 @@ def main() -> int:
                 print("\n" + ui.paint("═" * 60, ui.GREY) + "\n")
             if not os.environ.get("NVD_API_KEY"):
                 time.sleep(NVD_DELAY)  # stay under the NVD's no-key rate limit
-        r = lookup(cve_id, scores.get(cve_id), catalog, profile, args, show_card=show_cards)
+        r = lookup(cve_id, scores.get(cve_id), catalog, profile, args, show_card=show_cards, found_on=found_on.get(cve_id))
         if r:
             results.append(r)
         else:

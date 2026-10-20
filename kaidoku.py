@@ -29,6 +29,7 @@ from ui import fail, good, info, warn
 # Finds CVE IDs anywhere in text: "CVE-2021-44228", "cve_2021_44228", inside CSV cells, URLs, etc.
 CVE_FIND = re.compile(r"CVE[-_]\d{4}[-_]\d{4,}", re.IGNORECASE)
 NVD_DELAY = 6  # seconds between NVD lookups without a key (~5 per 30s allowed)
+NVD_DELAY_KEY = 0.7  # with a free key: 50 per 30s allowed (0.6s each), plus a little margin
 
 # reports/ sits next to kaidoku.py, so briefings land in one place no matter where you run it from
 REPORTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "reports")
@@ -203,8 +204,8 @@ def main() -> int:
         if i:
             if show_cards:
                 print("\n" + ui.paint("═" * 60, ui.GREY) + "\n")
-            if not os.environ.get("NVD_API_KEY"):
-                time.sleep(NVD_DELAY)  # stay under the NVD's no-key rate limit
+            time.sleep(NVD_DELAY_KEY if os.environ.get("NVD_API_KEY") else NVD_DELAY)  # stay under the NVD rate limit
+                
         r = lookup(cve_id, scores.get(cve_id), catalog, profile, args, show_card=show_cards, found_on=found_on.get(cve_id))
         if r:
             results.append(r)

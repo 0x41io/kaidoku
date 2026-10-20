@@ -30,6 +30,8 @@ from ui import fail, good, info, warn
 CVE_FIND = re.compile(r"CVE[-_]\d{4}[-_]\d{4,}", re.IGNORECASE)
 NVD_DELAY = 6  # seconds between NVD lookups without a key (~5 per 30s allowed)
 
+# reports/ sits next to kaidoku.py, so briefings land in one place no matter where you run it from
+REPORTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "reports")
 
 def extract_ids(text: str) -> list[str]:
     """Pull every CVE ID out of a blob of text, normalized, de-duplicated, in order."""
@@ -101,9 +103,9 @@ def lookup(cve_id: str, score: dict | None, catalog: dict, profile: dict | None,
             fail(f"AI briefing failed: {e}")
         else:
             result["briefing"] = briefing
-            os.makedirs("reports", exist_ok=True)
+            os.makedirs(REPORTS_DIR, exist_ok=True)
             stamp = datetime.now().strftime("%Y-%m-%d_%H%M")
-            path = os.path.join("reports", f"{cve_id}_{stamp}.md")
+            path = os.path.join(REPORTS_DIR, f"{cve_id}_{stamp}.md")
             header = (
                 f"# kaidoku briefing: {cve_id}\n\n"
                 f"*Generated {datetime.now():%Y-%m-%d %H:%M} · verdict: {verdict['label']} · "

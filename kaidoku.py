@@ -218,7 +218,7 @@ def main() -> int:
 
     if args.json and results:
         with open(args.json, "w") as f:
-            json.dump(results if len(results) > 1 else results[0], f, indent=2)
+            json.dump(results, f, indent=2)  # always a list, even for one CVE, so readers get one shape 
         print()
         good(f"Saved results to {args.json}")
 

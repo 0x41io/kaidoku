@@ -34,7 +34,8 @@ Most CVE pages give you a wall of text and a CVSS number. kaidoku combines the t
 - **Batch triage:** feed it a list, a scanner export, or piped input, and get a ranked table, most urgent first (KEV, then EPSS, then CVSS)
 - **Reads CVEs from any text:** Nessus/OpenVAS/Trivy exports, CSVs, emails, advisories. If a CVE ID is in there, kaidoku finds it
 - **Reads [mønømi](https://github.com/0x41io/monomi) scans (`--monomi FILE`):** feed it monomi's `--json` output and every CVE keeps the host and IP it was found on. The card gets a **Found on** line, batch tables get a **Found on** column, and AI briefings name the affected hosts and suggest verifying each one. CDN edge IPs are skipped, same as in monomi
-- **Saved briefings** in `reports/`, and **JSON export**
+- **Saved briefings** in `reports/` (always next to kaidoku.py, wherever you run it from), and **JSON export** (always a list, even for one CVE)
+- **Treats outside data as untrusted:** text from the NVD, CISA and Shodan is stripped of terminal escape codes before printing, and the AI is told to ignore any instructions hidden in it
 - No API keys needed for lookups
 
 ## Installation
@@ -58,7 +59,7 @@ export ANTHROPIC_API_KEY="your-key-here"
 export CLAUDE_MODEL="model-id-here"   # optional; defaults to the newest Sonnet
 ```
 
-**NVD** (only if you look up a lot of CVEs): without a key the NVD allows about 5 lookups per 30 seconds. A [free NVD key](https://nvd.nist.gov/developers/request-an-api-key) raises that to 50.
+**NVD** (only if you look up a lot of CVEs): without a key the NVD allows about 5 lookups per 30 seconds. A [free NVD key](https://nvd.nist.gov/developers/request-an-api-key) raises that to 50. kaidoku paces its lookups to stay under either limit.
 
 ```bash
 export NVD_API_KEY="your-key-here"
@@ -188,7 +189,16 @@ kaidoku/
 ├── reports/              # saved briefings (git-ignored)
 ├── cache/                # local copy of the CISA KEV catalog (git-ignored)
 ├── profile.example.json  # example environment profile
+├── test_kaidoku.py       # tests (python3 -m pytest)
 └── requirements.txt
+```
+## Development
+
+Run the tests (no internet or API keys needed):
+
+```bash
+pip install pytest
+python3 -m pytest -v
 ```
 
 ## Limitations

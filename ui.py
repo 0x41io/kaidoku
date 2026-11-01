@@ -7,6 +7,7 @@ when output isn't a terminal (piping to a file) or when NO_COLOR is set.
 
 import os
 import re
+import shutil
 import sys
 
 from sources import VERSION
@@ -27,17 +28,11 @@ RESET = "\033[0m"
 BOLD = "\033[1m"
 
 WHITE = rgb(240, 240, 240)
-SILVER = rgb(120, 120, 128)    # shadow edge on the white letters
 RED = rgb(255, 40, 60)
-DARK_RED = rgb(110, 0, 18)     # shadow edge on the red letters
+LOGO_RED = rgb(215, 25, 32)    # #D71920, the red in the 0x41 logo
 GREY = rgb(130, 130, 140)
 GREEN = rgb(80, 220, 120)
 YELLOW = rgb(255, 200, 60)
-
-# Top-to-bottom red gradient for the "41" (bright at the top, deeper below)
-RED_RAMP = [rgb(255, 70, 85), rgb(255, 45, 62), rgb(235, 25, 45),
-            rgb(210, 15, 35), rgb(180, 8, 28), rgb(150, 0, 22)]
-
 
 def paint(text: str, *codes: str) -> str:
     return "".join(codes) + text + RESET if ENABLED else text
@@ -54,47 +49,35 @@ def safe(text: str) -> str:
     return _CONTROL.sub("?", str(text))
 
 
+# "kaidoku" in the BlurVision ASCII font (figlet), lightest shade removed and letters spaced out
 LOGO = [
-    " ██████╗ ██╗  ██╗██╗  ██╗ ██╗",
-    "██╔═████╗╚██╗██╔╝██║  ██║███║",
-    "██║██╔██║ ╚███╔╝ ███████║╚██║",
-    "████╔╝██║ ██╔██╗ ╚════██║ ██║",
-    "╚██████╔╝██╔╝ ██╗     ██║ ██║",
-    " ╚═════╝ ╚═╝  ╚═╝     ╚═╝ ╚═╝",
+    "▒▓█▓▒  ▒▓█▓▒   ▒▓██████▓▒   ▒▓█▓▒  ▒▓███████▓▒    ▒▓██████▓▒   ▒▓█▓▒  ▒▓█▓▒  ▒▓█▓▒  ▒▓█▓▒",
+    "▒▓█▓▒  ▒▓█▓▒  ▒▓█▓▒  ▒▓█▓▒  ▒▓█▓▒  ▒▓█▓▒  ▒▓█▓▒  ▒▓█▓▒  ▒▓█▓▒  ▒▓█▓▒  ▒▓█▓▒  ▒▓█▓▒  ▒▓█▓▒",
+    "▒▓█▓▒  ▒▓█▓▒  ▒▓█▓▒  ▒▓█▓▒  ▒▓█▓▒  ▒▓█▓▒  ▒▓█▓▒  ▒▓█▓▒  ▒▓█▓▒  ▒▓█▓▒  ▒▓█▓▒  ▒▓█▓▒  ▒▓█▓▒",
+    "▒▓███████▓▒   ▒▓████████▓▒  ▒▓█▓▒  ▒▓█▓▒  ▒▓█▓▒  ▒▓█▓▒  ▒▓█▓▒  ▒▓███████▓▒   ▒▓█▓▒  ▒▓█▓▒",
+    "▒▓█▓▒  ▒▓█▓▒  ▒▓█▓▒  ▒▓█▓▒  ▒▓█▓▒  ▒▓█▓▒  ▒▓█▓▒  ▒▓█▓▒  ▒▓█▓▒  ▒▓█▓▒  ▒▓█▓▒  ▒▓█▓▒  ▒▓█▓▒",
+    "▒▓█▓▒  ▒▓█▓▒  ▒▓█▓▒  ▒▓█▓▒  ▒▓█▓▒  ▒▓█▓▒  ▒▓█▓▒  ▒▓█▓▒  ▒▓█▓▒  ▒▓█▓▒  ▒▓█▓▒  ▒▓█▓▒  ▒▓█▓▒",
+    "▒▓█▓▒  ▒▓█▓▒  ▒▓█▓▒  ▒▓█▓▒  ▒▓█▓▒  ▒▓███████▓▒    ▒▓██████▓▒   ▒▓█▓▒  ▒▓█▓▒   ▒▓██████▓▒",
 ]
-SPLIT = 17  # column where "0x" ends and "41" begins
-
-
-def _shade(segment: str, face: str, edge: str) -> str:
-    """Solid blocks get the face color, box-drawing 'shadow' gets the edge color."""
-    out, current = [], None
-    for ch in segment:
-        color = face if ch == "█" else edge if ch.strip() else None
-        if color and color != current:
-            out.append(color)
-            current = color
-        out.append(ch)
-    return "".join(out) + RESET
+LOGO_WIDTH = max(len(row) for row in LOGO)
 
 
 def banner() -> str:
-    side = [
-        "",
-        f"{paint('kαidøku', BOLD, RED)}  {paint('v' + VERSION, GREY)}",
-        "",
-        paint("CVE intel · AI explained", GREY),
-        paint("by ", GREY) + paint("0x", WHITE) + paint("41", RED),
-        "",
-    ]
-    lines = []
-    for i, row in enumerate(LOGO):
-        if ENABLED:
-            logo = _shade(row[:SPLIT], WHITE, SILVER) + _shade(row[SPLIT:], RED_RAMP[i], DARK_RED)
-        else:
-            logo = row
-        lines.append(f"{logo}   {side[i]}".rstrip())
-    return "\n" + "\n".join(lines) + "\n"
+    """The big red "kaidoku" with "by Øx41 · version" under its right edge.
 
+    Terminals narrower than the logo get a one-line version instead,
+    so the big one never wraps into a mess.
+    """
+    tag_text = f"by Øx41 · v{VERSION}"
+    tag = paint("by ", GREY) + paint("Øx41", BOLD, WHITE) + paint(f" · v{VERSION}", GREY)
+
+    cols = shutil.get_terminal_size((110, 24)).columns
+    if cols <= LOGO_WIDTH:
+        return f"\n{paint('kαidøku', BOLD, LOGO_RED)}  {tag}\n"
+
+    logo = "\n".join(paint(row, LOGO_RED) for row in LOGO)
+    pad = " " * (LOGO_WIDTH - len(tag_text))
+    return f"\n{logo}\n{pad}{tag}\n"
 
 # Status markers used throughout the CLI
 def info(msg: str) -> None:

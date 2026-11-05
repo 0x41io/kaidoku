@@ -1,13 +1,10 @@
-# kaidøku
-
-```
- ██████╗ ██╗  ██╗██╗  ██╗ ██╗
-██╔═████╗╚██╗██╔╝██║  ██║███║
-██║██╔██║ ╚███╔╝ ███████║╚██║
-████╔╝██║ ██╔██╗ ╚════██║ ██║
-╚██████╔╝██╔╝ ██╗     ██║ ██║
- ╚═════╝ ╚═╝  ╚═╝     ╚═╝ ╚═╝   kαidøku
-```
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/0x41io/kaidoku/main/assets/kaidoku-dark.png">
+    <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/0x41io/kaidoku/main/assets/kaidoku-light.png">
+    <img src="https://raw.githubusercontent.com/0x41io/kaidoku/main/assets/kaidoku-banner.png" alt="kaidøku by 0x41" width="420">
+  </picture>
+</p>
 
 **kaidoku** by 0x41: **CVE intelligence, explained.**
 

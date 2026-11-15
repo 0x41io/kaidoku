@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-0x41 / kaidoku - CVE intelligence, explained.
+0x41 / kaidoku - findings and CVEs, explained.
 
 Usage:
     python kaidoku.py CVE-2021-44228
@@ -8,6 +8,7 @@ Usage:
     python kaidoku.py CVE-2021-44228 --ai --context "We run Java apps on Tomcat behind a load balancer"
     python kaidoku.py --file scan-report.txt
     cat cves.txt | python kaidoku.py -
+    python kaidoku.py --akashi ~/akashi/history/example.com.jsonl --ai
 """
 
 import argparse
@@ -19,6 +20,7 @@ import time
 from datetime import datetime
 
 from sources import epss, kev, nvd
+import akashi_import
 import analysis
 import envprofile
 import monomi_import
@@ -121,14 +123,72 @@ def lookup(cve_id: str, score: dict | None, catalog: dict, profile: dict | None,
     return result
 
 
+def run_akashi(args, profile: dict | None) -> int:
+    """Explain the leads in an akashi proof history: a card each (no AI
+    needed), a ranked table, and with --ai a briefing per lead. Akashi's
+    verdicts are shown as recorded; nothing here changes one."""
+    try:
+        target, leads = akashi_import.load(args.akashi)
+    except ValueError as e:
+        fail(str(e))
+        return 1
+    info(f"Read {len(leads)} lead(s) from akashi's proof history for {ui.paint(target, ui.BOLD, ui.WHITE)}")
+    if args.ai and len(leads) > 5:
+        warn(f"--ai will make {len(leads)} Claude requests (one per lead).")
+    print()
+
+    context = args.context or (profile or {}).get("description") or None
+    for i, lead in enumerate(leads):
+        if i:
+            print("\n" + ui.paint("═" * 60, ui.GREY) + "\n")
+        ui.finding_card(lead)
+        if not args.ai:
+            continue
+        print()
+        info("Asking Claude to explain it...")
+        try:
+            briefing, model = analysis.explain_finding(lead, target, context)
+        except Exception as e:  # missing key, network, API errors
+            fail(f"AI briefing failed: {e}")
+            continue
+        lead["briefing"] = briefing
+        os.makedirs(REPORTS_DIR, exist_ok=True)
+        stamp = datetime.now().strftime("%Y-%m-%d_%H%M")
+        safe_target = re.sub(r"[^A-Za-z0-9._-]", "_", target)
+        path = os.path.join(REPORTS_DIR, f"akashi_{safe_target}_{lead['id']}_{lead['rule']}_{stamp}.md")
+        header = (
+            f"# kaidoku briefing: {lead['name']} ({lead['id']}) on {target}\n\n"
+            f"*Generated {datetime.now():%Y-%m-%d %H:%M} · akashi verdict: {lead['label']} · "
+            f"model: {model}{' · tailored to your environment' if context else ''}*\n\n"
+        )
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(header + briefing + "\n")
+        print()
+        ui.render_report(briefing)
+        print()
+        good(f"Briefing saved to {path}")
+
+    if len(leads) > 1:
+        print()
+        ui.findings_table(leads)
+    if args.json:
+        with open(args.json, "w", encoding="utf-8") as f:
+            json.dump(leads, f, indent=2)  # a list, like the CVE results
+        print()
+        good(f"Saved results to {args.json}")
+    return 0
+
+
 def main() -> int:
-    parser = argparse.ArgumentParser(description="0x41 / kaidoku - CVE intelligence, explained")
+    parser = argparse.ArgumentParser(description="0x41 / kaidoku - findings and CVEs, explained")
     parser.add_argument("cves", nargs="*", metavar="CVE",
                         help="one or more CVE IDs, e.g. CVE-2021-44228 (use - to read from stdin)")
     parser.add_argument("-f", "--file", metavar="FILE",
                         help="read CVE IDs from any text file: a list, a scanner export, a CSV...")
     parser.add_argument("--monomi", metavar="FILE",
                         help="read CVEs from a monomi --json file, keeping the host/IP each was found on")
+    parser.add_argument("--akashi", metavar="FILE",
+                        help="explain the leads in an akashi proof history (akashi/history/<target>.jsonl)")
     parser.add_argument("--cards", action="store_true", help="show the full card for every CVE in a batch")
     parser.add_argument("--ai", action="store_true", help="have Claude write a plain-English briefing (needs ANTHROPIC_API_KEY)")
     parser.add_argument("--context", metavar="TEXT", help="describe your environment so the AI tailors the impact (use with --ai)")
@@ -151,6 +211,11 @@ def main() -> int:
     if profile:
         info(f"Using profile {ui.paint(profile['name'], ui.BOLD, ui.WHITE)} "
              f"({len(profile['software'])} products listed)")
+    if args.akashi:
+        if args.cves or args.file or args.monomi:
+            fail("--akashi explains findings on its own: run CVE lookups (IDs, --file, --monomi) separately.")
+            return 1
+        return run_akashi(args, profile)
     try:
         ids = gather_ids(args)
     except ValueError as e:

@@ -29,7 +29,6 @@ BOLD = "\033[1m"
 
 WHITE = rgb(240, 240, 240)
 RED = rgb(255, 40, 60)
-LOGO_RED = rgb(215, 25, 32)    # #D71920, the red in the 0x41 logo
 GREY = rgb(130, 130, 140)
 GREEN = rgb(80, 220, 120)
 YELLOW = rgb(255, 200, 60)
@@ -63,7 +62,8 @@ LOGO_WIDTH = max(len(row) for row in LOGO)
 
 
 def banner() -> str:
-    """The big red "kaidoku" with "by Øx41 · version" under its right edge.
+    """The big white "kaidoku" with "by Øx41 · version" under its right edge
+    (white like monomi and akashi: the 0x41 brand is black and white).
 
     Terminals narrower than the logo get a one-line version instead,
     so the big one never wraps into a mess.
@@ -73,9 +73,9 @@ def banner() -> str:
 
     cols = shutil.get_terminal_size((110, 24)).columns
     if cols <= LOGO_WIDTH:
-        return f"\n{paint('kαidøku', BOLD, LOGO_RED)}  {tag}\n"
+        return f"\n{paint('kαidøku', BOLD, WHITE)}  {tag}\n"
 
-    logo = "\n".join(paint(row, LOGO_RED) for row in LOGO)
+    logo = "\n".join(paint(row, WHITE) for row in LOGO)
     pad = " " * (LOGO_WIDTH - len(tag_text))
     return f"\n{logo}\n{pad}{tag}\n"
 
@@ -395,3 +395,62 @@ def summary_table(results: list[dict], missing: list[str]) -> None:
     if missing:
         print()
         warn("Not found or failed: " + ", ".join(missing))
+
+
+# ---------------------------------------------------------------------------
+# Akashi findings (v0.7): proven leads, explained
+# ---------------------------------------------------------------------------
+
+def _row_wrapped(label: str, text: str, width: int = 14) -> None:
+    """Like _row, but long text wraps and lines up under the value column."""
+    indent = "  " + " " * width
+    lines = _wrap(text, indent).split("\n")
+    print(f"  {paint(label.ljust(width), GREY)}{lines[0].lstrip()}")
+    for line in lines[1:]:
+        print(line)
+
+
+def finding_card(lead: dict) -> None:
+    """One lead from Akashi's proof history: its state, the proof, the fix,
+    and how it got here. Everything comes from Akashi's verdicts; nothing is
+    decided here. Hostnames and DNS answers come from the target, so every
+    line goes through safe()."""
+    from akashi_import import next_step, when
+
+    print("  " + paint(f"{lead['id']}  {lead['name']}", BOLD, WHITE))
+    print("  " + paint("─" * 60, GREY))
+    print(f"  {_badge(lead['label'], lead['level'])}  {safe(lead['headline'])}")
+    print()
+    steps = [f"{t['word']} {paint(when(t['checked_at']), GREY)}" for t in lead["timeline"]]
+    _row("History", " → ".join(steps))
+    for i, line in enumerate(lead["evidence"]):
+        _row_wrapped("Proof" if i == 0 else "", line)
+    if next_step(lead):
+        _row_wrapped("Next", next_step(lead))
+    if lead["fix"] and lead["state"] == "open":
+        print()
+        owner = f" ({safe(lead['owner'])})" if lead["owner"] else ""
+        _row("Fix" + owner, "")
+        width = max(40, _cols() - 6)
+        for n, step in enumerate(lead["fix"], 1):
+            # hanging indent: wrapped lines line up under the step's text, not its number
+            lines = _textwrap.wrap(safe(step), width, initial_indent=f"    {n}. ",
+                                   subsequent_indent=" " * (len(str(n)) + 6))
+            print("\n".join(lines))
+    elif lead["state"] == "fixed":
+        _row("Fix", paint("closed: the re-check no longer finds it", GREEN))
+    _row("", paint("(from akashi · proof history)", GREY))
+
+
+def findings_table(leads: list[dict]) -> None:
+    """One row per lead, already ranked: still open first, then unclear,
+    fixed, ruled out."""
+    print("  " + paint(f"Findings · {len(leads)} lead{'s' if len(leads) != 1 else ''}, "
+                       "most urgent first", BOLD, WHITE))
+    print("  " + paint("─" * 60, GREY))
+    w = len("RULED OUT")
+    print(paint(f"  {'ID':<4}  {'State'.ljust(w + (2 if ENABLED else 4))}  {'Finding'.ljust(32)}  Headline", GREY))
+    room = max(20, _cols() - 4 - 2 - (w + 4) - 2 - 32 - 2)
+    for lead in leads:
+        badge = _badge(lead["label"].center(w), lead["level"])
+        print(f"  {lead['id']:<4}  {badge}  {_cell(lead['name'], 32).ljust(32)}  {_cell(lead['headline'], room)}")

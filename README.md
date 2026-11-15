@@ -6,9 +6,11 @@
   </picture>
 </p>
 
-**kaidoku** by 0x41: **CVE intelligence, explained.**
+**kaidoku** by 0x41: **findings and CVEs, explained.**
 
-*Kaidoku (解読) is Japanese for "decipher".* Give it a CVE ID and it pulls the official data, tells you how urgent it really is, and (optionally) has Claude explain it in plain English: what it is, how an attack works, who's affected, and what to do.
+*Kaidoku (解読) is Japanese for "decipher".* Give it a CVE ID and it pulls the official data, tells you how urgent it really is, and (optionally) has Claude explain it in plain English: what it is, how an attack works, who's affected, and what to do. Give it [akashi](https://github.com/0x41io/akashi)'s proof history and it explains every finding akashi proved: what was found, the proof, the fix, and whether the fix worked.
+
+**The 0x41 suite:** [mønømi](https://github.com/0x41io/monomi) finds · [akashi](https://github.com/0x41io/akashi) proves · **kaidoku explains**.
 
 Most CVE pages give you a wall of text and a CVSS number. kaidoku combines the three signals security teams actually use to prioritize:
 
@@ -33,6 +35,7 @@ Most CVE pages give you a wall of text and a CVSS number. kaidoku combines the t
 - **Reads [mønømi](https://github.com/0x41io/monomi) scans (`--monomi FILE`):** feed it monomi's `--json` output and every CVE keeps the host and IP it was found on. The card gets a **Found on** line, batch tables get a **Found on** column, and AI briefings name the affected hosts and suggest verifying each one. CDN edge IPs are skipped, same as in monomi
 - **Saved briefings** in `reports/` (always next to kaidoku.py, wherever you run it from), and **JSON export** (always a list, even for one CVE)
 - **Treats outside data as untrusted:** text from the NVD, CISA and Shodan is stripped of terminal escape codes before printing, and the AI is told to ignore any instructions hidden in it
+- **Explains akashi's proven findings (`--akashi FILE`):** reads akashi's proof history and gives every lead a card: its state (**CONFIRMED**, **UNCLEAR**, **FIXED**, **RULED OUT**), its history (confirmed → still open → fixed), the proof akashi recorded, the exact fix and who owns it, and for an unclear lead the next step that would settle it. Ranked most urgent first. Works without AI. With `--ai`, Claude writes a briefing that must cite akashi's evidence and is told the verdict is final: it explains akashi's verdict, it never changes it
 - No API keys needed for lookups
 
 ## Installation
@@ -106,6 +109,22 @@ python kaidoku.py --monomi ../monomi/scan.json --ai    # one briefing per CVE
 
 monomi's CVEs come from Shodan InternetDB, which matches them from software version banners. A **Found on** host means "this server's banner matches a vulnerable version", not confirmed exploitability. Verify the installed version on each host.
 
+### From akashi (prove, fix, re-check, explained)
+
+[akashi](https://github.com/0x41io/akashi) proves monomi's leads and records every verdict in a proof history, one file per target. Point kaidoku at that file:
+
+```bash
+# in the akashi folder: prove the leads, apply the fixes, re-check
+akashi verify scan.json --scope scope.txt
+akashi recheck scan.json --scope scope.txt
+
+# in the kaidoku folder: explain every finding
+python kaidoku.py --akashi ../akashi/history/example.com.jsonl
+python kaidoku.py --akashi ../akashi/history/example.com.jsonl --ai    # one briefing per finding
+```
+
+kaidoku only reads the file: it never imports akashi or runs a check, and it never changes a verdict. The state, history, fix and next step all come from akashi's records; the AI only explains them. `--akashi` runs on its own (look up CVEs in a separate run), and `--json` saves the findings as a list.
+
 ### Environment profile
 
 Tell kaidoku what you run once, and every lookup checks the CVE against it.
@@ -177,6 +196,7 @@ kaidoku/
 ├── triage.py             # rule-based urgency verdict (KEV > EPSS > CVSS)
 ├── analysis.py           # Claude briefing
 ├── monomi_import.py      # reads monomi --json (CVEs + where they were found)
+├── akashi_import.py      # reads akashi's proof history (findings, states, timelines)
 ├── envprofile.py         # environment profile + stack matching
 ├── ui.py                 # banner, summary card, report rendering
 ├── sources/
@@ -186,12 +206,15 @@ kaidoku/
 ├── reports/              # saved briefings (git-ignored)
 ├── cache/                # local copy of the CISA KEV catalog (git-ignored)
 ├── profile.example.json  # example environment profile
+├── fixtures/             # real akashi output the tests read
+├── conftest.py           # test setup: no test may reach the network
 ├── test_kaidoku.py       # tests (python3 -m pytest)
+├── test_akashi.py        # tests for --akashi
 └── requirements.txt
 ```
 ## Development
 
-Run the tests (no internet or API keys needed):
+Run the tests (no internet or API keys needed; a test that tries to reach the network fails):
 
 ```bash
 pip install pytest
@@ -204,6 +227,7 @@ python3 -m pytest -v
 - `--monomi` locations come from Shodan's banner-based CVE matching, which can't see distro backports or configuration. Treat **Found on** as "worth checking", not "confirmed vulnerable".
 - New CVEs are often "Awaiting Analysis" in the NVD, with no CVSS score or product list yet.
 - EPSS scores update daily and aren't available for every CVE.
+- `--akashi` explains what akashi recorded and nothing more: an UNCLEAR finding stays unclear until a re-check settles it.
 - AI briefings are only as good as the public data. Always confirm fixed versions in the vendor's advisory.
 
 ## Roadmap
@@ -214,6 +238,7 @@ python3 -m pytest -v
 - [ ] CVSS v4 vector explanations
 - [x] Environment profiles saved to a file instead of `--context` every time
 - [x] Read monomi scan results (`--monomi`), keeping each CVE's host and IP
+- [x] v0.7: explain akashi's proven findings (`--akashi`): cards, timelines, fixes, next steps, AI briefings that cite the proof
 - [ ] Version-aware stack matching
 - [ ] Web UI with PDF report export
 

@@ -28,6 +28,24 @@ VECTOR_LABELS = {
     "A": ("Availability impact", {"H": "High", "L": "Low", "N": "None"}),
 }
 
+# CVSS v4.0 has its own parts (v0.7.1). The base impacts are split between
+# the vulnerable system (VC/VI/VA) and the systems after it (SC/SI/SA).
+# Labels end in "impact" like v3's, so the card highlights them the same way.
+_IMPACT = {"H": "High", "L": "Low", "N": "None"}
+VECTOR_LABELS_V4 = {
+    "AV": VECTOR_LABELS["AV"],
+    "AC": VECTOR_LABELS["AC"],
+    "AT": ("Attack requirements", {"N": "None", "P": "Present (conditions must line up)"}),
+    "PR": VECTOR_LABELS["PR"],
+    "UI": ("User interaction", {"N": "None", "P": "Passive", "A": "Active"}),
+    "VC": ("Confidentiality impact", _IMPACT),
+    "VI": ("Integrity impact", _IMPACT),
+    "VA": ("Availability impact", _IMPACT),
+    "SC": ("Downstream conf. impact", _IMPACT),
+    "SI": ("Downstream integ. impact", _IMPACT),
+    "SA": ("Downstream avail. impact", _IMPACT),
+}
+
 REF_PRIORITY = ["Patch", "Vendor Advisory", "Mitigation", "Exploit", "Third Party Advisory"]
 
 
@@ -56,33 +74,63 @@ def fetch(cve_id: str, retries: int = 3, timeout: int = 30) -> dict | None:
     raise RuntimeError(f"NVD lookup failed after {retries} attempts: {last_error}")
 
 
+def _metric(metrics: dict, key: str) -> dict | None:
+    """One CVSS score from the record (NVD's own "Primary" one when there are
+    several), or None when the record has no score of that version."""
+    entries = metrics.get(key) or []
+    if not entries:
+        return None
+    entry = next((e for e in entries if e.get("type") == "Primary"), entries[0])
+    data = entry.get("cvssData", {})
+    return {
+        "version": data.get("version", key[-2:]),
+        "score": data.get("baseScore"),
+        "severity": data.get("baseSeverity") or entry.get("baseSeverity"),
+        "vector": data.get("vectorString", ""),
+        "source": entry.get("source"),
+    }
+
+
 def _pick_cvss(metrics: dict) -> dict | None:
-    """Prefer CVSS v3.1 > v3.0 > v4.0 > v2, and NVD's own score over others."""
+    """The score the verdict and ranking use: v3.1 > v3.0 > v4.0 > v2.
+
+    v3.x stays first on purpose: most CVEs only have v3.x, and the verdict
+    and ranking compare scores across CVEs, so mixing in v4.0 (which runs
+    differently) would reorder them. A v4.0 score that exists alongside is
+    shown too (see _extra_v4)."""
     for key in ("cvssMetricV31", "cvssMetricV30", "cvssMetricV40", "cvssMetricV2"):
-        entries = metrics.get(key) or []
-        if not entries:
-            continue
-        entry = next((e for e in entries if e.get("type") == "Primary"), entries[0])
-        data = entry.get("cvssData", {})
-        return {
-            "version": data.get("version", key[-2:]),
-            "score": data.get("baseScore"),
-            "severity": data.get("baseSeverity") or entry.get("baseSeverity"),
-            "vector": data.get("vectorString", ""),
-            "source": entry.get("source"),
-        }
+        picked = _metric(metrics, key)
+        if picked:
+            return picked
     return None
 
 
+def _extra_v4(metrics: dict, primary: dict | None) -> dict | None:
+    """The v4.0 score when the record has one AND the verdict uses another
+    version, so the card can show both (v0.7.1). None otherwise, so a
+    v4.0-only CVE isn't shown twice."""
+    v4 = _metric(metrics, "cvssMetricV40")
+    if not v4 or (primary and str(primary.get("version")).startswith("4")):
+        return None
+    return v4
+
+
 def explain_vector(vector: str) -> list[tuple[str, str]]:
-    """'CVSS:3.1/AV:N/AC:L/...' -> [('Attack vector', 'Network (remote)'), ...]"""
-    if not vector.startswith("CVSS:3"):
+    """'CVSS:3.1/AV:N/AC:L/...' -> [('Attack vector', 'Network (remote)'), ...]
+
+    v3.x and (since v0.7.1) v4.0 vectors. v4.0's threat and environmental
+    parts (E, CR, MAV...) aren't base metrics, so they're left out."""
+    if vector.startswith("CVSS:3"):
+        labels = VECTOR_LABELS
+    elif vector.startswith("CVSS:4"):
+        labels = VECTOR_LABELS_V4
+    else:
         return []
     out = []
     for part in vector.split("/")[1:]:
         key, _, val = part.partition(":")
-        if key in VECTOR_LABELS:
-            label, values = VECTOR_LABELS[key]
+        if key in labels:
+            label, values = labels[key]
             out.append((label, values.get(val, val)))
     return out
 
@@ -167,7 +215,8 @@ def parse(cve: dict) -> dict:
             "action_due": cve.get("cisaActionDue"),
             "required_action": cve.get("cisaRequiredAction"),
         }
-    cvss = _pick_cvss(cve.get("metrics", {}))
+    metrics = cve.get("metrics", {})
+    cvss = _pick_cvss(metrics)
     return {
         "id": cve.get("id"),
         "status": cve.get("vulnStatus"),
@@ -175,6 +224,7 @@ def parse(cve: dict) -> dict:
         "last_modified": (cve.get("lastModified") or "")[:10],
         "description": desc,
         "cvss": cvss,
+        "cvss_v4": _extra_v4(metrics, cvss),
         "vector_explained": explain_vector(cvss["vector"]) if cvss else [],
         "cwes": cwes,
         "kev": kev,

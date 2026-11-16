@@ -269,3 +269,17 @@ def test_banner_is_white_not_red(monkeypatch):
         monkeypatch.setattr(ui.shutil, "get_terminal_size", lambda *a, c=cols: type("S", (), {"columns": c})())
         text = ui.banner()
         assert ui.WHITE in text and ui.rgb(215, 25, 32) not in text
+
+
+# --- the AI briefing theme (v0.7.1): white and grey, red only where it warns ---
+
+def test_briefing_theme_has_no_brand_red():
+    import ui
+    reds = ("#ff283c", "#6e0012", "#ff8c96")       # the old red decoration
+    assert not any(r in style for style in ui.REPORT_THEME.values() for r in reds)
+    assert ui.REPORT_THEME["markdown.h2"] == "bold #f0f0f0"
+
+
+def test_priority_badges_keep_their_warning_colors():
+    import ui
+    assert "#8b0000" in ui._PRIORITY_STYLE["critical"] and "#c8102e" in ui._PRIORITY_STYLE["high"]

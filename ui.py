@@ -112,12 +112,35 @@ _PRIORITY = _re.compile(
 _PRIORITY_STYLE = {"critical": "bold #ffffff on #8b0000", "high": "bold #ffffff on #c8102e", "medium": "bold #0c0c0c on #ffc83c", "low": "bold #ffffff on #5a5a64"}
 
 
+# The AI briefing's look (v0.7.1): white headings, grey structure, like the
+# white banner. Red stays only where it warns (the CRITICAL / HIGH badges,
+# "in your stack", high EPSS), never as decoration.
+REPORT_THEME = {
+    "markdown.h1": "bold #f0f0f0",
+    "markdown.h1.border": "#505058",
+    "markdown.h2": "bold #f0f0f0",
+    "markdown.h3": "bold #f0f0f0",
+    "markdown.h4": "bold #f0f0f0",
+    "markdown.strong": "bold #f0f0f0",
+    "markdown.em": "italic #b4b4be",
+    "markdown.code": "#c8c8d2",
+    "markdown.item.bullet": "#8c8c96",
+    "markdown.item.number": "#8c8c96",
+    "markdown.block_quote": "#ffc83c",
+    "markdown.hr": "#505058",
+    "markdown.link": "#78b4ff",
+    "markdown.table.border": "#505058",
+    "markdown.table.header": "bold #f0f0f0",
+}
+
+
 def render_report(markdown: str) -> None:
     """Pretty-print the AI's Markdown report in the terminal.
 
-    Uses the 'rich' library when it's installed (headings in 0x41 red, real
-    tables, bold text, Critical/High/Medium/Low as colored badges). Falls back to the
-    raw Markdown when rich is missing or color is off.
+    Uses the 'rich' library when it's installed (white headings and grey
+    structure, matching the black-and-white 0x41 brand; real tables, bold text;
+    Critical/High/Medium/Low keep their colored badges, since there color means
+    something). Falls back to the raw Markdown when rich is missing or color is off.
     """
     try:
         from rich.console import Console
@@ -131,24 +154,7 @@ def render_report(markdown: str) -> None:
         print(markdown)
         return
 
-    theme = Theme({
-        "markdown.h1": "bold #ff283c",
-        "markdown.h1.border": "#6e0012",
-        "markdown.h2": "bold #ff283c",
-        "markdown.h3": "bold #f0f0f0",
-        "markdown.h4": "bold #f0f0f0",
-        "markdown.strong": "bold #f0f0f0",
-        "markdown.em": "italic #b4b4be",
-        "markdown.code": "#ff8c96",
-        "markdown.item.bullet": "#ff283c",
-        "markdown.item.number": "#ff283c",
-        "markdown.block_quote": "#ffc83c",
-        "markdown.hr": "#6e0012",
-        "markdown.link": "#78b4ff",
-        "markdown.table.border": "#6e0012",
-        "markdown.table.header": "bold #ff283c",
-    })
-    console = Console(theme=theme, highlight=False)
+    console = Console(theme=Theme(REPORT_THEME), highlight=False)
 
     # rich centers top-level "# Title" headings; demote them so everything lines up left
     markdown = _re.sub(r"^# ", "## ", markdown, flags=_re.MULTILINE)
@@ -208,6 +214,16 @@ def _wrap(text: str, indent: str) -> str:
     return "\n".join(indent + line for line in _textwrap.wrap(safe(text), width))
 
 
+def _cvss_row(cvss: dict) -> None:
+    """One 'CVSS 3.1   8.1  HIGH   ████████░░' row."""
+    sev = (cvss.get("severity") or "").upper()
+    color = _SEV_COLOR.get(sev, WHITE)
+    filled = max(0, min(10, round(cvss["score"])))
+    bar = paint("█" * filled, color) + paint("░" * (10 - filled), GREY)
+    score = f"{cvss['score']:.1f}"
+    _row(f"CVSS {cvss['version']}", f"{paint(score, BOLD, color)}  {paint(sev.ljust(9), color)} {bar}")
+
+
 def cve_card(nvd: dict, epss: dict | None, verdict: dict, stack: dict | None = None, found_on: list | None = None) -> None:
     title = paint(nvd["id"], BOLD, WHITE)
     if nvd.get("kev") and nvd["kev"].get("name"):
@@ -237,12 +253,11 @@ def cve_card(nvd: dict, epss: dict | None, verdict: dict, stack: dict | None = N
         print()
     cvss = nvd.get("cvss")
     if cvss and cvss.get("score") is not None:
-        sev = (cvss.get("severity") or "").upper()
-        color = _SEV_COLOR.get(sev, WHITE)
-        filled = round(cvss["score"])
-        bar = paint("█" * filled, color) + paint("░" * (10 - filled), GREY)
-        score = f"{cvss['score']:.1f}"
-        _row(f"CVSS {cvss['version']}", f"{paint(score, BOLD, color)}  {paint(sev.ljust(9), color)} {bar}")
+        _cvss_row(cvss)
+        # v0.7.1: a v4.0 score next to the v3.x one, so the card matches what
+        # vendors and advisories quote. The verdict still uses the line above.
+        if (nvd.get("cvss_v4") or {}).get("score") is not None:
+            _cvss_row(nvd["cvss_v4"])
     else:
         _row("CVSS", paint("not scored yet", GREY))
 
@@ -276,10 +291,11 @@ def cve_card(nvd: dict, epss: dict | None, verdict: dict, stack: dict | None = N
         for label, value in nvd["vector_explained"]:
             # Highlight the parts that make an attack easier or worse
             danger = (label in ("Attack vector",) and value.startswith("Network")) or \
-                     (label in ("Privileges needed", "User interaction") and value == "None") or \
+                     (label in ("Privileges needed", "User interaction", "Attack requirements")
+                      and value == "None") or \
                      (label == "Attack complexity" and value == "Low") or \
                      (label.endswith("impact") and value == "High")
-            _row(label, paint(value, RED) if danger else value, indent="    ", width=24)
+            _row(label, paint(value, RED) if danger else value, indent="    ", width=26)
 
     if nvd.get("affected"):
         print()

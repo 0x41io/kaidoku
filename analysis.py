@@ -7,6 +7,8 @@ Requires an Anthropic API key in the ANTHROPIC_API_KEY environment variable.
 import json
 import os
 
+from sources.nvd import explain_vector
+
 SYSTEM_PROMPT = """You are a vulnerability analyst at 0x41, writing a short \
 briefing about one CVE for a defender: an IT admin, security engineer, or \
 business owner who needs to decide what to do. Be clear, practical, and \
@@ -21,6 +23,12 @@ match software the reader listed ("match", "no", or "unknown" when the NVD \
 hasn't listed products yet). It's a name match without version checks, so \
 treat "match" as "probably runs this software" and "no" as "not in what they \
 listed", not as proof either way.
+
+A CVE can carry two CVSS scores: "cvss" (the one the verdict uses, named in \
+"cvss_used_for_verdict") and "cvss_v4" (a CVSS 4.0 score that exists too). \
+When both are present, give both in section 4 with their versions, e.g. \
+"8.1 (CVSS 3.1) / 9.2 (CVSS 4.0)", since advisories often quote the 4.0 one, \
+and use whichever vector explains the attack best in section 2.
 
 You may also get "found_on": the IPs and hostnames where 0x41's recon tool \
 monomi saw this CVE, via Shodan InternetDB. Shodan matches CVEs from \
@@ -103,9 +111,13 @@ def explain(nvd: dict, epss: dict | None, verdict: dict, context: str | None = N
     payload = {
         "nvd": {k: v for k, v in nvd.items() if k != "vector_explained"},
         "cvss_vector_plain_english": dict(nvd.get("vector_explained") or []),
+        "cvss_used_for_verdict": f"CVSS {(nvd.get('cvss') or {}).get('version', 'none')}",
         "epss": epss,
         "rule_based_verdict": verdict,
     }    
+    if nvd.get("cvss_v4"):
+        # both scores exist: the verdict uses the v3.x one, advisories often quote v4.0
+        payload["cvss_v4_plain_english"] = dict(explain_vector(nvd["cvss_v4"].get("vector", "")))
     if stack:
         payload["your_stack"] = stack
     if found_on:

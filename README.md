@@ -25,6 +25,7 @@ Most CVE pages give you a wall of text and a CVSS number. kaidoku combines the t
 ## Features
 
 - **CVE summary card:** severity, exploitation likelihood, known-exploited status, weakness type, affected products and versions, and the most useful reference links (patches and advisories first)
+- **CVSS 3.1 and 4.0 side by side:** when a CVE has both, the card shows both, so it matches what vendors and advisories quote; the verdict and ranking stay on 3.1 so scores compare fairly across CVEs. v4.0 vectors get the same plain-English attack table as v3
 - **Urgency verdict without AI:** `PATCH NOW` / `HIGH PRIORITY` / `SCHEDULE` / `ROUTINE`, based on KEV first, then EPSS, then CVSS
 - **Attack vector in plain English:** `AV:N/AC:L/PR:N` becomes "Network (remote) · Low complexity · No privileges needed", with the dangerous parts highlighted
 - **AI briefing (optional, `--ai`):** Claude explains what it is, how an attack works (conceptually, never exploit code), who's affected, how urgent it is, what to do, and the business impact
@@ -210,6 +211,7 @@ kaidoku/
 ├── conftest.py           # test setup: no test may reach the network
 ├── test_kaidoku.py       # tests (python3 -m pytest)
 ├── test_akashi.py        # tests for --akashi
+├── test_cvss.py          # tests for CVSS 3.1 + 4.0
 └── requirements.txt
 ```
 ## Development
@@ -235,10 +237,11 @@ python3 -m pytest -v
 - [x] Batch triage from scanner exports, files, or piped input
 - [x] Ransomware-campaign flag from the CISA KEV feed
 - [ ] CVE.org fallback for brand-new CVEs NVD hasn't analyzed yet
-- [ ] CVSS v4 vector explanations
+- [x] CVSS v4 vector explanations, and both scores shown when a CVE has 3.1 and 4.0 (v0.7.1)
 - [x] Environment profiles saved to a file instead of `--context` every time
 - [x] Read monomi scan results (`--monomi`), keeping each CVE's host and IP
 - [x] v0.7: explain akashi's proven findings (`--akashi`): cards, timelines, fixes, next steps, AI briefings that cite the proof
+- [x] v0.7.1: CVSS 3.1 and 4.0 side by side, v4.0 attack tables, white and grey AI briefings (red only on warnings)
 - [ ] Version-aware stack matching
 - [ ] Web UI with PDF report export
 

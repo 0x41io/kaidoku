@@ -12,7 +12,7 @@ import time
 
 import requests
 
-from sources import USER_AGENT
+from kaidoku.sources import USER_AGENT
 
 API_URL = "https://services.nvd.nist.gov/rest/json/cves/2.0"
 

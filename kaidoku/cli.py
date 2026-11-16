@@ -1,0 +1,288 @@
+"""
+0x41 / kaidoku - findings and CVEs, explained. The command line.
+
+Run it as `kaidoku ...` (after pip install) or `python kaidoku.py ...` from a
+clone; both call main() below.
+
+Usage:
+    python kaidoku.py CVE-2021-44228
+    python kaidoku.py CVE-2021-44228 --ai
+    python kaidoku.py CVE-2021-44228 --ai --context "We run Java apps on Tomcat behind a load balancer"
+    python kaidoku.py --file scan-report.txt
+    cat cves.txt | python kaidoku.py -
+    python kaidoku.py --akashi ~/akashi/history/example.com.jsonl --ai
+"""
+
+import argparse
+import json
+import os
+import re
+import sys
+import time
+from datetime import datetime
+
+from kaidoku import akashi_import, analysis, envprofile, monomi_import, triage, ui
+from kaidoku.sources import epss, kev, nvd
+from kaidoku.ui import fail, good, info, warn
+
+# Finds CVE IDs anywhere in text: "CVE-2021-44228", "cve_2021_44228", inside CSV cells, URLs, etc.
+CVE_FIND = re.compile(r"CVE[-_]\d{4}[-_]\d{4,}", re.IGNORECASE)
+NVD_DELAY = 6  # seconds between NVD lookups without a key (~5 per 30s allowed)
+NVD_DELAY_KEY = 0.7  # with a free key: 50 per 30s allowed (0.6s each), plus a little margin
+
+# reports/ sits next to kaidoku.py, so briefings land in one place no matter where you run it from
+REPORTS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "reports")
+
+def extract_ids(text: str) -> list[str]:
+    """Pull every CVE ID out of a blob of text, normalized, de-duplicated, in order."""
+    found = (m.upper().replace("_", "-") for m in CVE_FIND.findall(text))
+    return list(dict.fromkeys(found))
+
+
+def gather_ids(args) -> list[str]:
+    """Collect CVE IDs from the command line, --file, and stdin ('-')."""
+    # Anything typed on the command line that isn't a CVE is probably a typo, so say so.
+    for item in args.cves:
+        if item != "-" and not CVE_FIND.fullmatch(item.strip()):
+            raise ValueError(f"'{item}' doesn't look like a CVE ID (expected e.g. CVE-2021-44228)")
+
+    chunks = []
+    for item in args.cves:
+        if item == "-":
+            chunks.append(sys.stdin.read())
+        else:
+            chunks.append(item)
+    if args.file:
+        try:
+            with open(args.file, encoding="utf-8", errors="replace") as f:
+                chunks.append(f.read())
+        except OSError as e:
+            raise ValueError(f"Couldn't read {args.file}: {e.strerror}")
+
+    return extract_ids("\n".join(chunks))
+
+
+def lookup(cve_id: str, score: dict | None, catalog: dict, profile: dict | None, args, show_card: bool,
+           found_on: list | None = None) -> dict | None:
+    if show_card:
+        info(f"Looking up {ui.paint(cve_id, ui.BOLD, ui.WHITE)} in the NVD...")
+    try:
+        record = nvd.collect(cve_id)
+    except RuntimeError as e:
+        fail(f"{cve_id}: {e}")
+        if not os.environ.get("NVD_API_KEY"):
+            warn("Without an NVD API key you're limited to ~5 lookups per 30s. A free key raises that (see README).")
+        return None
+    if record is None:
+        fail(f"{cve_id} wasn't found in the NVD. Check the ID, or it may be reserved and not published yet.")
+        return None
+
+    kev.apply(record, catalog)  # CISA's own KEV data: fresher, and includes ransomware use
+    verdict = triage.verdict(record, score)
+    stack = envprofile.match(profile, record.get("affected") or [])
+    result = {"cve": record, "epss": score, "verdict": verdict, "stack": stack, "found_on": found_on or []}
+
+    if not show_card:
+        good(f"{cve_id.ljust(16)}{ui.paint(verdict['label'], ui.GREY)}")
+        return result
+
+    print()
+    if record.get("status") == "Rejected":
+        warn(f"{cve_id} is REJECTED in the NVD (withdrawn or a duplicate). Details below are for reference only.")
+        print()
+    ui.cve_card(record, score, verdict, stack, found_on)
+
+    if args.ai:
+        print()
+                # --context wins for this run; otherwise use the profile's description
+        context = args.context or (profile or {}).get("description") or None
+        info("Asking Claude to explain it...")
+        try:
+            briefing, model = analysis.explain(record, score, verdict, context, stack, found_on)
+        except Exception as e:  # missing key, network, API errors
+            fail(f"AI briefing failed: {e}")
+        else:
+            result["briefing"] = briefing
+            os.makedirs(REPORTS_DIR, exist_ok=True)
+            stamp = datetime.now().strftime("%Y-%m-%d_%H%M")
+            path = os.path.join(REPORTS_DIR, f"{cve_id}_{stamp}.md")
+            header = (
+                f"# kaidoku briefing: {cve_id}\n\n"
+                f"*Generated {datetime.now():%Y-%m-%d %H:%M} · verdict: {verdict['label']} · "
+                f"model: {model}{' · tailored to your environment' if context else ''}*\n\n"
+            )
+            with open(path, "w") as f:
+                f.write(header + briefing + "\n")
+            print()
+            ui.render_report(briefing)
+            print()
+            good(f"Briefing saved to {path}")
+    return result
+
+
+def run_akashi(args, profile: dict | None) -> int:
+    """Explain the leads in an akashi proof history: a card each (no AI
+    needed), a ranked table, and with --ai a briefing per lead. Akashi's
+    verdicts are shown as recorded; nothing here changes one."""
+    try:
+        target, leads = akashi_import.load(args.akashi)
+    except ValueError as e:
+        fail(str(e))
+        return 1
+    info(f"Read {len(leads)} lead(s) from akashi's proof history for {ui.paint(target, ui.BOLD, ui.WHITE)}")
+    if args.ai and len(leads) > 5:
+        warn(f"--ai will make {len(leads)} Claude requests (one per lead).")
+    print()
+
+    context = args.context or (profile or {}).get("description") or None
+    for i, lead in enumerate(leads):
+        if i:
+            print("\n" + ui.paint("═" * 60, ui.GREY) + "\n")
+        ui.finding_card(lead)
+        if not args.ai:
+            continue
+        print()
+        info("Asking Claude to explain it...")
+        try:
+            briefing, model = analysis.explain_finding(lead, target, context)
+        except Exception as e:  # missing key, network, API errors
+            fail(f"AI briefing failed: {e}")
+            continue
+        lead["briefing"] = briefing
+        os.makedirs(REPORTS_DIR, exist_ok=True)
+        stamp = datetime.now().strftime("%Y-%m-%d_%H%M")
+        safe_target = re.sub(r"[^A-Za-z0-9._-]", "_", target)
+        path = os.path.join(REPORTS_DIR, f"akashi_{safe_target}_{lead['id']}_{lead['rule']}_{stamp}.md")
+        header = (
+            f"# kaidoku briefing: {lead['name']} ({lead['id']}) on {target}\n\n"
+            f"*Generated {datetime.now():%Y-%m-%d %H:%M} · akashi verdict: {lead['label']} · "
+            f"model: {model}{' · tailored to your environment' if context else ''}*\n\n"
+        )
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(header + briefing + "\n")
+        print()
+        ui.render_report(briefing)
+        print()
+        good(f"Briefing saved to {path}")
+
+    if len(leads) > 1:
+        print()
+        ui.findings_table(leads)
+    if args.json:
+        with open(args.json, "w", encoding="utf-8") as f:
+            json.dump(leads, f, indent=2)  # a list, like the CVE results
+        print()
+        good(f"Saved results to {args.json}")
+    return 0
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="0x41 / kaidoku - findings and CVEs, explained")
+    parser.add_argument("cves", nargs="*", metavar="CVE",
+                        help="one or more CVE IDs, e.g. CVE-2021-44228 (use - to read from stdin)")
+    parser.add_argument("-f", "--file", metavar="FILE",
+                        help="read CVE IDs from any text file: a list, a scanner export, a CSV...")
+    parser.add_argument("--monomi", metavar="FILE",
+                        help="read CVEs from a monomi --json file, keeping the host/IP each was found on")
+    parser.add_argument("--akashi", metavar="FILE",
+                        help="explain the leads in an akashi proof history (akashi/history/<target>.jsonl)")
+    parser.add_argument("--cards", action="store_true", help="show the full card for every CVE in a batch")
+    parser.add_argument("--ai", action="store_true", help="have Claude write a plain-English briefing (needs ANTHROPIC_API_KEY)")
+    parser.add_argument("--context", metavar="TEXT", help="describe your environment so the AI tailors the impact (use with --ai)")
+    parser.add_argument("--profile", metavar="FILE",
+                        help="your environment profile (default: ~/.kaidoku/profile.json, if it exists)")
+    parser.add_argument("--json", metavar="FILE", help="save results to a JSON file")
+    parser.add_argument("--no-color", action="store_true", help="plain output (also respects NO_COLOR)")
+    args = parser.parse_args()
+    if args.no_color:
+        ui.disable()
+    print(ui.banner())
+
+    if args.context and not args.ai:
+        warn("--context only affects the AI briefing; add --ai to use it.")
+    try:
+        profile = envprofile.load(args.profile)
+    except ValueError as e:
+        fail(str(e))
+        return 1
+    if profile:
+        info(f"Using profile {ui.paint(profile['name'], ui.BOLD, ui.WHITE)} "
+             f"({len(profile['software'])} products listed)")
+    if args.akashi:
+        if args.cves or args.file or args.monomi:
+            fail("--akashi explains findings on its own: run CVE lookups (IDs, --file, --monomi) separately.")
+            return 1
+        return run_akashi(args, profile)
+    try:
+        ids = gather_ids(args)
+    except ValueError as e:
+        fail(str(e))
+        return 1
+    found_on = {}
+    if args.monomi:
+        try:
+            target, monomi_ids, found_on = monomi_import.load(args.monomi)
+        except ValueError as e:
+            fail(str(e))
+            return 1
+        info(f"Read {len(monomi_ids)} CVE(s) from monomi's scan of {ui.paint(target, ui.BOLD, ui.WHITE)}")
+        ids = list(dict.fromkeys(ids + monomi_ids))
+    if not ids:
+        fail("No CVE IDs found. Pass some on the command line, with --file, or pipe them in with -")
+        return 1
+
+    batch = len(ids) > 1
+    show_cards = not batch or args.cards or args.ai
+    if batch:
+        info(f"Found {len(ids)} CVEs.")
+        if args.ai and len(ids) > 5:
+            warn(f"--ai will make {len(ids)} Claude requests (one per CVE).")
+        if not os.environ.get("NVD_API_KEY"):
+            mins, secs = divmod((len(ids) - 1) * NVD_DELAY, 60)
+            warn(f"No NVD API key, so lookups are spaced out: about {mins}m {secs}s. A free key makes this ~10x faster.")
+        print()
+
+    # One EPSS request covers the whole batch
+    try:
+        scores = epss.collect_many(ids)
+    except RuntimeError as e:
+        warn(f"{e} (continuing without EPSS)")
+        scores = {}
+
+    # CISA's KEV catalog: read from the local cache when it's under 24h old
+    try:
+        catalog, kev_status = kev.load()
+    except RuntimeError as e:
+        warn(f"{e} (falling back to the NVD's copy of KEV data, without ransomware info)")
+        catalog = {}
+    else:
+        if kev_status == "download":
+            info(f"Downloaded CISA's KEV catalog ({len(catalog):,} entries), cached for 24h.")
+        elif kev_status == "stale":
+            warn("Couldn't refresh CISA's KEV catalog, so using the last saved copy.")
+
+    results, missing = [], []
+    for i, cve_id in enumerate(ids):
+        if i:
+            if show_cards:
+                print("\n" + ui.paint("═" * 60, ui.GREY) + "\n")
+            time.sleep(NVD_DELAY_KEY if os.environ.get("NVD_API_KEY") else NVD_DELAY)  # stay under the NVD rate limit
+                
+        r = lookup(cve_id, scores.get(cve_id), catalog, profile, args, show_card=show_cards, found_on=found_on.get(cve_id))
+        if r:
+            results.append(r)
+        else:
+            missing.append(cve_id)
+
+    if batch and results:
+        results.sort(key=triage.rank_key)
+        print()
+        ui.summary_table(results, missing)
+
+    if args.json and results:
+        with open(args.json, "w") as f:
+            json.dump(results, f, indent=2)  # always a list, even for one CVE, so readers get one shape 
+        print()
+        good(f"Saved results to {args.json}")
+
+    return 0 if results else 1

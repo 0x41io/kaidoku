@@ -10,7 +10,7 @@ import re
 import shutil
 import sys
 
-from sources import VERSION
+from kaidoku.sources import VERSION
 
 ENABLED = sys.stdout.isatty() and "NO_COLOR" not in os.environ
 
@@ -431,7 +431,7 @@ def finding_card(lead: dict) -> None:
     and how it got here. Everything comes from Akashi's verdicts; nothing is
     decided here. Hostnames and DNS answers come from the target, so every
     line goes through safe()."""
-    from akashi_import import next_step, when
+    from kaidoku.akashi_import import next_step, when
 
     print("  " + paint(f"{lead['id']}  {lead['name']}", BOLD, WHITE))
     print("  " + paint("─" * 60, GREY))

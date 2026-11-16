@@ -8,7 +8,7 @@ how likely it is to actually be used. Free API, no key.
 
 import requests
 
-from sources import USER_AGENT
+from kaidoku.sources import USER_AGENT
 
 API_URL = "https://api.first.org/data/v1/epss"
 CHUNK = 50  # CVEs per request; keeps the URL a sane length

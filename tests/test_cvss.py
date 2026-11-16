@@ -10,10 +10,8 @@ import json
 import sys
 import types
 
-import analysis
-import triage
-import ui
-from sources import nvd
+from kaidoku import analysis, triage, ui
+from kaidoku.sources import nvd
 
 V31 = {"source": "cna", "type": "Secondary", "cvssData": {
     "version": "3.1", "baseScore": 8.1, "baseSeverity": "HIGH",

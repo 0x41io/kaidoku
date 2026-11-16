@@ -14,9 +14,8 @@ from pathlib import Path
 
 import pytest
 
-import akashi_import
-import analysis
-import kaidoku
+from kaidoku import akashi_import, analysis
+from kaidoku import cli as kaidoku
 
 HISTORY = str(Path(__file__).parent / "fixtures" / "akashi-history.jsonl")
 
@@ -263,7 +262,7 @@ def test_findings_prompt_forbids_changing_the_verdict():
 # --- the banner (v0.7): white, like monomi and akashi ---
 
 def test_banner_is_white_not_red(monkeypatch):
-    import ui
+    from kaidoku import ui
     monkeypatch.setattr(ui, "ENABLED", True)
     for cols in (200, 40):                       # the big logo and the narrow fallback
         monkeypatch.setattr(ui.shutil, "get_terminal_size", lambda *a, c=cols: type("S", (), {"columns": c})())
@@ -274,12 +273,12 @@ def test_banner_is_white_not_red(monkeypatch):
 # --- the AI briefing theme (v0.7.1): white and grey, red only where it warns ---
 
 def test_briefing_theme_has_no_brand_red():
-    import ui
+    from kaidoku import ui
     reds = ("#ff283c", "#6e0012", "#ff8c96")       # the old red decoration
     assert not any(r in style for style in ui.REPORT_THEME.values() for r in reds)
     assert ui.REPORT_THEME["markdown.h2"] == "bold #f0f0f0"
 
 
 def test_priority_badges_keep_their_warning_colors():
-    import ui
+    from kaidoku import ui
     assert "#8b0000" in ui._PRIORITY_STYLE["critical"] and "#c8102e" in ui._PRIORITY_STYLE["high"]

@@ -2,9 +2,8 @@
 First tests for kaidoku. Run them with:  python3 -m pytest -v
 """
 
-import envprofile
-import triage
-from kaidoku import extract_ids
+from kaidoku import envprofile, triage
+from kaidoku.cli import extract_ids
 
 
 

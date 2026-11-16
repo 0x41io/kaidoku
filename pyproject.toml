@@ -1,0 +1,5 @@
+# Test settings. (Packaging settings come in the next commit.)
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# so the tests import the kaidoku/ package from this clone
+pythonpath = ["."]

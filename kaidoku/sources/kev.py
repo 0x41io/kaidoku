@@ -14,13 +14,14 @@ import time
 
 import requests
 
+from kaidoku import home
 from kaidoku.sources import USER_AGENT
 
 FEED_URL = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
 
-# cache/ sits at the repo root (next to kaidoku.py), so the same cache is used no matter where you run it from
-PROJECT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-CACHE_DIR = os.path.join(PROJECT_DIR, "cache")
+# cache/ is in Kaidoku's data folder (see home.py): the repo when running from
+# a clone, so the same cache is used no matter where you run it from
+CACHE_DIR = home.data_dir("cache")
 CACHE_FILE = os.path.join(CACHE_DIR, "kev.json")
 MAX_AGE = 24 * 60 * 60  # seconds: refresh once a day
 

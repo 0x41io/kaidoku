@@ -21,7 +21,7 @@ import sys
 import time
 from datetime import datetime
 
-from kaidoku import akashi_import, analysis, envprofile, monomi_import, triage, ui
+from kaidoku import akashi_import, analysis, envprofile, home, monomi_import, triage, ui
 from kaidoku.sources import epss, kev, nvd
 from kaidoku.ui import fail, good, info, warn
 
@@ -31,7 +31,7 @@ NVD_DELAY = 6  # seconds between NVD lookups without a key (~5 per 30s allowed)
 NVD_DELAY_KEY = 0.7  # with a free key: 50 per 30s allowed (0.6s each), plus a little margin
 
 # reports/ sits next to kaidoku.py, so briefings land in one place no matter where you run it from
-REPORTS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "reports")
+REPORTS_DIR = home.data_dir("reports")
 
 def extract_ids(text: str) -> list[str]:
     """Pull every CVE ID out of a blob of text, normalized, de-duplicated, in order."""

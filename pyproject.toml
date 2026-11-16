@@ -1,4 +1,36 @@
-# Test settings. (Packaging settings come in the next commit.)
+# How Python installs Kaidoku as a package (pip install -e . / pip install .).
+# The code is the kaidoku/ folder; tests/ and assets/ aren't installed.
+
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kaidoku"
+description = "0x41 / kaidoku - findings and CVEs, explained"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "0x41" }]
+requires-python = ">=3.10"
+# Both come from the files that already hold them, so there's still one place to change each:
+# the version from VERSION in kaidoku/sources/__init__.py, the dependencies from requirements.txt
+dynamic = ["version", "dependencies"]
+
+[project.urls]
+Homepage = "https://github.com/0x41io/kaidoku"
+
+# The command pip puts on your PATH: `kaidoku CVE-2021-44228`
+[project.scripts]
+kaidoku = "kaidoku.cli:main"
+
+[tool.setuptools.dynamic]
+version = { attr = "kaidoku.sources.VERSION" }
+dependencies = { file = ["requirements.txt"] }
+
+[tool.setuptools.packages.find]
+include = ["kaidoku", "kaidoku.*"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 # so the tests import the kaidoku/ package from this clone

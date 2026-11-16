@@ -1,2 +1,2 @@
-VERSION = "0.7.1"
+VERSION = "0.8.0"
 USER_AGENT = f"0x41-kaidoku/{VERSION} (vulnerability research)"

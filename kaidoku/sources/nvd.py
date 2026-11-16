@@ -16,6 +16,11 @@ from kaidoku.sources import USER_AGENT
 
 API_URL = "https://services.nvd.nist.gov/rest/json/cves/2.0"
 
+# Seconds between lookups, to stay under the NVD rate limit. Used by the
+# command line and by api.py, so both space their lookups the same way.
+DELAY = 6  # without a key: ~5 per 30s allowed
+DELAY_KEY = 0.7  # with a free key: 50 per 30s allowed (0.6s each), plus a little margin
+
 # Plain-English labels for CVSS v3 vector parts
 VECTOR_LABELS = {
     "AV": ("Attack vector", {"N": "Network (remote)", "A": "Adjacent network", "L": "Local access", "P": "Physical access"}),

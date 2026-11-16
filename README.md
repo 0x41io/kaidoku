@@ -48,8 +48,31 @@ git clone https://github.com/0x41io/kaidoku.git
 cd kaidoku
 python3 -m venv venv
 source venv/bin/activate        # Windows: venv\Scripts\activate
-pip install -r requirements.txt
+pip install -e .
 ```
+
+`pip install -e .` installs kaidoku with its dependencies and puts a `kaidoku`
+command on your PATH, so `kaidoku CVE-2021-44228` works from any folder.
+`python kaidoku.py CVE-2021-44228` from the clone works too.
+
+**Where it keeps data:** saved briefings (`reports/`) and the CISA KEV cache
+(`cache/`) live in the clone when you run it from one. A plain `pip install`
+(no clone) uses `~/.kaidoku` instead, and `KAIDOKU_HOME` overrides both.
+
+### As a library (v0.8)
+
+The 0x41 pipeline calls kaidoku directly. Both functions are quiet (they print
+nothing and write no files) and return the same data as `--json`:
+
+```python
+from kaidoku import api
+
+out = api.explain_history("../akashi/history/example.com.jsonl", ai=True)
+out = api.lookup_cves(["CVE-2021-44228"], ai=True)
+```
+
+What they return is locked by `tests/test_api.py`, so a change that would break
+the pipeline fails a test first.
 
 ### API keys (both optional)
 
@@ -192,26 +215,28 @@ CVE ID ──► NVD API ───────► CVSS, KEV status, CWE, product
 ## Project structure
 
 ```
-kaidoku/
-├── kaidoku.py            # CLI entry point
-├── triage.py             # rule-based urgency verdict (KEV > EPSS > CVSS)
-├── analysis.py           # Claude briefing
-├── monomi_import.py      # reads monomi --json (CVEs + where they were found)
-├── akashi_import.py      # reads akashi's proof history (findings, states, timelines)
-├── envprofile.py         # environment profile + stack matching
-├── ui.py                 # banner, summary card, report rendering
-├── sources/
-│   ├── nvd.py            # NVD API 2.0 (+ CISA KEV fields)
-│   ├── epss.py           # FIRST EPSS API
-│   └── kev.py            # CISA KEV catalog (ransomware flag, 24h cache)
-├── reports/              # saved briefings (git-ignored)
-├── cache/                # local copy of the CISA KEV catalog (git-ignored)
-├── profile.example.json  # example environment profile
-├── fixtures/             # real akashi output the tests read
-├── conftest.py           # test setup: no test may reach the network
-├── test_kaidoku.py       # tests (python3 -m pytest)
-├── test_akashi.py        # tests for --akashi
-├── test_cvss.py          # tests for CVSS 3.1 + 4.0
+kaidoku/                    the repo
+├── kaidoku.py              # runs the command line from a clone (python kaidoku.py ...)
+├── pyproject.toml          # pip install -e . (the kaidoku command)
+├── kaidoku/                # the package
+│   ├── cli.py              # the command line
+│   ├── api.py              # what the 0x41 pipeline calls (quiet, returns data)
+│   ├── home.py             # where reports/ and cache/ live (KAIDOKU_HOME)
+│   ├── triage.py           # rule-based urgency verdict (KEV > EPSS > CVSS)
+│   ├── analysis.py         # Claude briefings (CVEs and akashi findings)
+│   ├── monomi_import.py    # reads monomi --json (CVEs + where they were found)
+│   ├── akashi_import.py    # reads akashi's proof history (findings, states, timelines)
+│   ├── envprofile.py       # environment profile + stack matching
+│   ├── ui.py               # banner, summary card, report rendering
+│   └── sources/
+│       ├── nvd.py          # NVD API 2.0 (+ CISA KEV fields)
+│       ├── epss.py         # FIRST EPSS API
+│       └── kev.py          # CISA KEV catalog (ransomware flag, 24h cache)
+├── tests/                  # python3 -m pytest (no test may reach the network)
+│   └── fixtures/           # real akashi output the tests read
+├── reports/                # saved briefings (git-ignored)
+├── cache/                  # local copy of the CISA KEV catalog (git-ignored)
+├── profile.example.json    # example environment profile
 └── requirements.txt
 ```
 ## Development
@@ -219,7 +244,7 @@ kaidoku/
 Run the tests (no internet or API keys needed; a test that tries to reach the network fails):
 
 ```bash
-pip install pytest
+pip install -e . pytest
 python3 -m pytest -v
 ```
 
@@ -242,6 +267,7 @@ python3 -m pytest -v
 - [x] Read monomi scan results (`--monomi`), keeping each CVE's host and IP
 - [x] v0.7: explain akashi's proven findings (`--akashi`): cards, timelines, fixes, next steps, AI briefings that cite the proof
 - [x] v0.7.1: CVSS 3.1 and 4.0 side by side, v4.0 attack tables, white and grey AI briefings (red only on warnings)
+- [x] v0.8: an installable package (`pip install -e .`, the `kaidoku` command) with a quiet library API for the 0x41 pipeline
 - [ ] Version-aware stack matching
 - [ ] Web UI with PDF report export
 

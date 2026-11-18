@@ -97,8 +97,8 @@ def load() -> tuple[dict[str, dict], str]:
 def days_to_kev(published: str | None, date_added: str | None) -> int | None:
     """Days between the NVD publishing a CVE and CISA adding it to KEV.
 
-    Negative means CISA listed it before the NVD published it: attackers were
-    using it before the public record existed. None if either date is missing
+    Negative means CISA listed it before the NVD published it. That can be a
+    true zero-day, or just the NVD publishing late after the vendor's advisory. None if either date is missing
     or not a YYYY-MM-DD date. The NVD's published date is the closest thing to
     "disclosure" we have, but vendors sometimes announce a few days earlier,
     so this is labeled "after publication", never "after disclosure".

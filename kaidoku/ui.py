@@ -235,7 +235,7 @@ def _kev_timing(kev: dict) -> str:
         return f", {days} day{'s' if days != 1 else ''} after publication"
     n = -days
     return ", " + paint(f"{n} day{'s' if n != 1 else ''} before the NVD published it "
-                        "(exploited before public disclosure)", BOLD, RED)
+                        "(CISA confirmed exploitation before the NVD record existed)", BOLD, RED)
 
 
 def cve_card(nvd: dict, epss: dict | None, verdict: dict, stack: dict | None = None, found_on: list | None = None) -> None:

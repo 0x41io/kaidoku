@@ -55,4 +55,6 @@ def test_card_wording():
     assert ui._kev_timing({"days_after_published": 1}) == ", 1 day after publication"
     assert ui._kev_timing({"days_after_published": 3}) == ", 3 days after publication"
     assert "12 days before the NVD published it" in ui._kev_timing({"days_after_published": -12})
+    assert "before the NVD record existed" in ui._kev_timing({"days_after_published": -12})
+    assert "disclosure" not in ui._kev_timing({"days_after_published": -12})
     assert "1 day before" in ui._kev_timing({"days_after_published": -1})

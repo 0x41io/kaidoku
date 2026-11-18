@@ -27,9 +27,11 @@ listed", not as proof either way.
 A KEV entry may carry "days_after_published": days between the NVD \
 publishing the CVE and CISA adding it to KEV. Call it "days after \
 publication", never "after disclosure" (vendors sometimes announce earlier). \
-Zero or a few days means attackers moved fast; a negative number means CISA \
-listed it before the NVD published it, so it was exploited before public \
-disclosure. Mention it when it helps the reader judge how fast to act.
+Zero or a few days means attackers moved fast. A negative number means CISA \
+confirmed exploitation before the NVD record existed: that can be a true \
+zero-day, or just a slow NVD after the vendor already disclosed it, so never \
+call it a zero-day on this number alone; say to check the vendor advisory's \
+date. Mention it when it helps the reader judge how fast to act.
 
 A CVE can carry two CVSS scores: "cvss" (the one the verdict uses, named in \
 "cvss_used_for_verdict") and "cvss_v4" (a CVSS 4.0 score that exists too). \

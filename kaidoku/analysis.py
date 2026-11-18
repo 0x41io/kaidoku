@@ -24,6 +24,13 @@ hasn't listed products yet). It's a name match without version checks, so \
 treat "match" as "probably runs this software" and "no" as "not in what they \
 listed", not as proof either way.
 
+A KEV entry may carry "days_after_published": days between the NVD \
+publishing the CVE and CISA adding it to KEV. Call it "days after \
+publication", never "after disclosure" (vendors sometimes announce earlier). \
+Zero or a few days means attackers moved fast; a negative number means CISA \
+listed it before the NVD published it, so it was exploited before public \
+disclosure. Mention it when it helps the reader judge how fast to act.
+
 A CVE can carry two CVSS scores: "cvss" (the one the verdict uses, named in \
 "cvss_used_for_verdict") and "cvss_v4" (a CVSS 4.0 score that exists too). \
 When both are present, give both in section 4 with their versions, e.g. \

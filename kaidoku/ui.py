@@ -224,6 +224,20 @@ def _cvss_row(cvss: dict) -> None:
     _row(f"CVSS {cvss['version']}", f"{paint(score, BOLD, color)}  {paint(sev.ljust(9), color)} {bar}")
 
 
+def _kev_timing(kev: dict) -> str:
+    """', 3 days after publication' for the CISA KEV row ('' if unknown)."""
+    days = kev.get("days_after_published")
+    if days is None:
+        return ""
+    if days == 0:
+        return ", the same day it was published"
+    if days > 0:
+        return f", {days} day{'s' if days != 1 else ''} after publication"
+    n = -days
+    return ", " + paint(f"{n} day{'s' if n != 1 else ''} before the NVD published it "
+                        "(exploited before public disclosure)", BOLD, RED)
+
+
 def cve_card(nvd: dict, epss: dict | None, verdict: dict, stack: dict | None = None, found_on: list | None = None) -> None:
     title = paint(nvd["id"], BOLD, WHITE)
     if nvd.get("kev") and nvd["kev"].get("name"):
@@ -273,7 +287,7 @@ def cve_card(nvd: dict, epss: dict | None, verdict: dict, stack: dict | None = N
     kev = nvd.get("kev")
     if kev:
         due = f" · US federal deadline {kev['action_due']}" if kev.get("action_due") else ""
-        _row("CISA KEV", paint("YES", BOLD, RED) + f" · listed {kev['date_added']}{due}")
+        _row("CISA KEV", paint("YES", BOLD, RED) + f" · listed {kev['date_added']}{_kev_timing(kev)}{due}")
         if kev.get("ransomware"):
             _row("Ransomware", paint("KNOWN", BOLD, RED) + " · used in ransomware campaigns (per CISA)")
         elif kev.get("ransomware") is False:

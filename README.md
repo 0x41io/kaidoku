@@ -31,6 +31,7 @@ Most CVE pages give you a wall of text and a CVSS number. kaidoku combines the t
 - **AI briefing (optional, `--ai`):** Claude explains what it is, how an attack works (conceptually, never exploit code), who's affected, how urgent it is, what to do, and the business impact
 - **Environment profiles:** describe what you run once, and kaidoku flags CVEs that hit your software (`IN YOUR STACK`), ranks them first in a batch, and tailors AI briefings to your setup. The matching works without AI. `--context` still overrides the description for a single run
 - **Ransomware flag:** shows whether CISA knows a CVE is being used in ransomware campaigns, and ranks those first in a batch
+- **Time to exploitation (v0.9):** for KEV CVEs, how many days passed between the NVD publishing the CVE and CISA confirming it's exploited. A negative number means it was exploited before public disclosure. Shown on the card, in `--json` (`kev.days_after_published`) and in AI briefings
 - **Batch triage:** feed it a list, a scanner export, or piped input, and get a ranked table, most urgent first (KEV, then EPSS, then CVSS)
 - **Reads CVEs from any text:** Nessus/OpenVAS/Trivy exports, CSVs, emails, advisories. If a CVE ID is in there, kaidoku finds it
 - **Reads [mønømi](https://github.com/0x41io/monomi) scans (`--monomi FILE`):** feed it monomi's `--json` output and every CVE keeps the host and IP it was found on. The card gets a **Found on** line, batch tables get a **Found on** column, and AI briefings name the affected hosts and suggest verifying each one. CDN edge IPs are skipped, same as in monomi
@@ -192,7 +193,7 @@ Your profile lives in your home folder, not the repo, because it describes what 
 
   CVSS 3.1      10.0  CRITICAL  ██████████
   EPSS          94.4% chance of exploitation in the next 30 days (top 0.1% of all CVEs)
-  CISA KEV      YES · exploited in the wild · added 2021-12-10 · federal patch deadline 2021-12-24
+  CISA KEV      YES · listed 2021-12-10, the same day it was published · US federal deadline 2021-12-24
   Weakness      CWE-20, CWE-400, CWE-502, CWE-917
 
   How it can be attacked
@@ -268,7 +269,8 @@ python3 -m pytest -v
 - [x] v0.7: explain akashi's proven findings (`--akashi`): cards, timelines, fixes, next steps, AI briefings that cite the proof
 - [x] v0.7.1: CVSS 3.1 and 4.0 side by side, v4.0 attack tables, white and grey AI briefings (red only on warnings)
 - [x] v0.8: an installable package (`pip install -e .`, the `kaidoku` command) with a quiet library API for the 0x41 pipeline
-- [ ] Version-aware stack matching
+- [x] v0.9: days from publication to CISA-confirmed exploitation on KEV CVEs
+- [ ] Version-aware stack matching (reading lockfiles for exact versions)
 - [ ] Web UI with PDF report export
 
 ## License

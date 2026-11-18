@@ -11,6 +11,7 @@ and look CVEs up in memory.
 import json
 import os
 import time
+from datetime import date
 
 import requests
 
@@ -93,6 +94,21 @@ def load() -> tuple[dict[str, dict], str]:
         raise RuntimeError(f"CISA KEV feed unavailable: {e}")
 
 
+def days_to_kev(published: str | None, date_added: str | None) -> int | None:
+    """Days between the NVD publishing a CVE and CISA adding it to KEV.
+
+    Negative means CISA listed it before the NVD published it: attackers were
+    using it before the public record existed. None if either date is missing
+    or not a YYYY-MM-DD date. The NVD's published date is the closest thing to
+    "disclosure" we have, but vendors sometimes announce a few days earlier,
+    so this is labeled "after publication", never "after disclosure".
+    """
+    try:
+        return (date.fromisoformat(date_added[:10]) - date.fromisoformat(published[:10])).days
+    except (TypeError, ValueError):
+        return None
+
+
 def apply(record: dict, catalog: dict[str, dict]) -> None:
     """Update an NVD record's 'kev' field with CISA's own (fresher) data, in place."""
     entry = catalog.get(record.get("id", ""))
@@ -100,3 +116,5 @@ def apply(record: dict, catalog: dict[str, dict]) -> None:
         record["kev"] = dict(entry)
     elif record.get("kev"):
         record["kev"].setdefault("ransomware", None)  # NVD says KEV, CISA's copy doesn't: unknown
+    if record.get("kev"):
+        record["kev"]["days_after_published"] = days_to_kev(record.get("published"), record["kev"].get("date_added"))

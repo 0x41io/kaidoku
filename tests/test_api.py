@@ -20,7 +20,7 @@ HISTORY = str(Path(__file__).parent / "fixtures" / "akashi-history.jsonl")
 TOP = {"kaidoku_version", "api_version"}
 LEAD_KEYS = {"rule", "name", "id", "key", "state", "label", "level", "headline",
              "evidence", "fix", "owner", "reason", "checked_at", "timeline"}
-RESULT_KEYS = {"cve", "epss", "verdict", "stack", "found_on"}
+RESULT_KEYS = {"cve", "epss", "verdict", "stack", "found_on", "preconditions", "excluded_by"}
 
 
 def fake_record(cve_id, score=9.8):

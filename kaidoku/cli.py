@@ -21,7 +21,7 @@ import sys
 import time
 from datetime import datetime
 
-from kaidoku import akashi_import, analysis, envprofile, home, monomi_import, triage, ui
+from kaidoku import akashi_import, analysis, envprofile, home, monomi_import, preconditions, triage, ui
 from kaidoku.sources import epss, kev, nvd
 from kaidoku.ui import fail, good, info, warn
 
@@ -80,7 +80,10 @@ def lookup(cve_id: str, score: dict | None, catalog: dict, profile: dict | None,
     kev.apply(record, catalog)  # CISA's own KEV data: fresher, and includes ransomware use
     verdict = triage.verdict(record, score)
     stack = envprofile.match(profile, record.get("affected") or [])
-    result = {"cve": record, "epss": score, "verdict": verdict, "stack": stack, "found_on": found_on or []}
+    pre = preconditions.tags(record)
+    excluded = preconditions.excluded_by(pre, getattr(args, "exclusions_list", None))
+    result = {"cve": record, "epss": score, "verdict": verdict, "stack": stack, "found_on": found_on or [],
+              "preconditions": pre, "excluded_by": excluded}
 
     if not show_card:
         good(f"{cve_id.ljust(16)}{ui.paint(verdict['label'], ui.GREY)}")
@@ -90,7 +93,7 @@ def lookup(cve_id: str, score: dict | None, catalog: dict, profile: dict | None,
     if record.get("status") == "Rejected":
         warn(f"{cve_id} is REJECTED in the NVD (withdrawn or a duplicate). Details below are for reference only.")
         print()
-    ui.cve_card(record, score, verdict, stack, found_on)
+    ui.cve_card(record, score, verdict, stack, found_on, pre, excluded)
 
     if args.ai:
         print()
@@ -98,7 +101,8 @@ def lookup(cve_id: str, score: dict | None, catalog: dict, profile: dict | None,
         context = args.context or (profile or {}).get("description") or None
         info("Asking Claude to explain it...")
         try:
-            briefing, model = analysis.explain(record, score, verdict, context, stack, found_on)
+            briefing, model = analysis.explain(record, score, verdict, context, stack, found_on,
+                                               pre, excluded)
         except Exception as e:  # missing key, network, API errors
             fail(f"AI briefing failed: {e}")
         else:
@@ -191,6 +195,10 @@ def main() -> int:
     parser.add_argument("--context", metavar="TEXT", help="describe your environment so the AI tailors the impact (use with --ai)")
     parser.add_argument("--profile", metavar="FILE",
                         help="your environment profile (default: ~/.kaidoku/profile.json, if it exists)")
+    parser.add_argument("--exclusions", metavar="FILE",
+                        help="a bug bounty program's excluded classes, one per line (dos, mitm, auth, "
+                             "user_action, local, adjacent, config): matching CVEs are marked "
+                             "'likely not reportable here', never hidden")
     parser.add_argument("--json", metavar="FILE", help="save results to a JSON file")
     parser.add_argument("--no-color", action="store_true", help="plain output (also respects NO_COLOR)")
     args = parser.parse_args()
@@ -208,6 +216,15 @@ def main() -> int:
     if profile:
         info(f"Using profile {ui.paint(profile['name'], ui.BOLD, ui.WHITE)} "
              f"({len(profile['software'])} products listed)")
+    args.exclusions_list = None
+    if args.exclusions:
+        try:
+            args.exclusions_list = preconditions.load_exclusions(args.exclusions)
+        except ValueError as e:
+            fail(str(e))
+            return 1
+        info(f"Program exclusions: {', '.join(args.exclusions_list)} "
+             "(matching CVEs are marked, never hidden)")
     if args.akashi:
         if args.cves or args.file or args.monomi:
             fail("--akashi explains findings on its own: run CVE lookups (IDs, --file, --monomi) separately.")
@@ -278,6 +295,10 @@ def main() -> int:
         results.sort(key=triage.rank_key)
         print()
         ui.summary_table(results, missing)
+        if args.exclusions_list:
+            marked = sum(1 for r in results if r["excluded_by"])
+            info(f"{marked} of {len(results)} CVE(s) fall under your exclusions "
+                 f"({', '.join(args.exclusions_list)}): marked *, likely not reportable here.")
 
     if args.json and results:
         with open(args.json, "w") as f:

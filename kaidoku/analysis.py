@@ -46,6 +46,14 @@ vulnerable version", not confirmed exploitability. When present, name these \
 hosts in sections 3, 4 and 6, and in section 5 suggest verifying the actual \
 installed version on each one.
 
+You may also get "preconditions": what an attack on this CVE needs before \
+it can work (e.g. dos_only, needs_mitm, needs_auth), each with a reason and \
+where it came from ("cvss" = the vector, "curated" = 0x41's notes on that \
+CVE). Mention them in section 2. If "program_excludes" is present, the reader \
+is a bug bounty hunter whose program excludes those classes: add one line at \
+the end of section 4 saying the CVE is likely not reportable under those \
+rules and why, but keep the defender urgency as it is.
+
 Write Markdown with these sections:
 ## 1. What it is
 2-4 sentences in plain English: what kind of flaw, in what software, and what \
@@ -107,7 +115,8 @@ def pick_model(client) -> str:
 
 
 def explain(nvd: dict, epss: dict | None, verdict: dict, context: str | None = None,
-            stack: dict | None = None, found_on: list | None = None) -> tuple[str, str]:
+            stack: dict | None = None, found_on: list | None = None,
+            pre: list | None = None, excluded: list | None = None) -> tuple[str, str]:
     """Send CVE data to Claude. Returns (markdown_briefing, model_used)."""
     if not os.environ.get("ANTHROPIC_API_KEY"):
         raise RuntimeError("ANTHROPIC_API_KEY is not set (see README for the API key step).")
@@ -131,6 +140,10 @@ def explain(nvd: dict, epss: dict | None, verdict: dict, context: str | None = N
         payload["your_stack"] = stack
     if found_on:
         payload["found_on"] = found_on
+    if pre:
+        payload["preconditions"] = [{k: p[k] for k in ("tag", "label", "reason", "source")} for p in pre]
+    if excluded:
+        payload["program_excludes"] = excluded
     content = "CVE data (JSON):\n```json\n" + json.dumps(payload, indent=2) + "\n```"
     if context:
         content += f"\n\nReader's environment (tailor sections 4-6 to this):\n{context}"

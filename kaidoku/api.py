@@ -17,7 +17,7 @@ renaming or removing one needs API_VERSION bumped and the pipeline updated.
 import os
 import time
 
-from kaidoku import akashi_import, analysis, envprofile, triage
+from kaidoku import akashi_import, analysis, envprofile, preconditions, triage
 from kaidoku.sources import VERSION, epss, kev, nvd
 
 API_VERSION = 1
@@ -44,7 +44,8 @@ def explain_history(path: str, ai: bool = False, context: str | None = None) -> 
 
 
 def lookup_cves(ids: list[str], ai: bool = False, context: str | None = None,
-                profile: dict | None = None, found_on: dict | None = None) -> dict:
+                profile: dict | None = None, found_on: dict | None = None,
+                exclusions: list[str] | None = None) -> dict:
     """Look up CVEs: NVD + EPSS + CISA KEV, the rule-based verdict, and with
     ai=True a briefing each.
 
@@ -53,7 +54,10 @@ def lookup_cves(ids: list[str], ai: bool = False, context: str | None = None,
     EPSS, then CVSS), each {"cve", "epss", "verdict", "stack", "found_on"}
     plus "briefing" / "model" or "briefing_error" with ai=True: the same
     shape as `kaidoku --json`. "missing" lists IDs the NVD didn't return.
-    found_on maps a CVE ID to where monomi saw it.
+    found_on maps a CVE ID to where monomi saw it. Since v0.10 each result
+    also has "preconditions" (what an attack needs, see preconditions.py)
+    and "excluded_by" (the classes of `exclusions` it falls under; [] when
+    none or no exclusions were given). Neither changes the verdict.
     """
     ids = list(dict.fromkeys(i.strip().upper() for i in ids if i and i.strip()))
     found_on = found_on or {}
@@ -88,13 +92,15 @@ def lookup_cves(ids: list[str], ai: bool = False, context: str | None = None,
         score = scores.get(cve_id)
         verdict = triage.verdict(record, score)
         stack = envprofile.match(profile, record.get("affected") or [])
+        pre = preconditions.tags(record)
         result = {"cve": record, "epss": score, "verdict": verdict, "stack": stack,
-                  "found_on": found_on.get(cve_id) or []}
+                  "found_on": found_on.get(cve_id) or [], "preconditions": pre,
+                  "excluded_by": preconditions.excluded_by(pre, exclusions)}
         if ai:
             try:
                 result["briefing"], result["model"] = analysis.explain(
                     record, score, verdict, context or (profile or {}).get("description") or None,
-                    stack, result["found_on"])
+                    stack, result["found_on"], pre, result["excluded_by"])
             except Exception as e:  # missing key, network, API errors: keep going
                 result["briefing_error"] = str(e)
         results.append(result)

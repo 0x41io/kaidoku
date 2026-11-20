@@ -238,7 +238,8 @@ def _kev_timing(kev: dict) -> str:
                         "(CISA confirmed exploitation before the NVD record existed)", BOLD, RED)
 
 
-def cve_card(nvd: dict, epss: dict | None, verdict: dict, stack: dict | None = None, found_on: list | None = None) -> None:
+def cve_card(nvd: dict, epss: dict | None, verdict: dict, stack: dict | None = None, found_on: list | None = None,
+             pre: list | None = None, excluded: list | None = None) -> None:
     title = paint(nvd["id"], BOLD, WHITE)
     if nvd.get("kev") and nvd["kev"].get("name"):
         title += paint("  ·  " + safe(nvd["kev"]["name"]), WHITE)
@@ -294,6 +295,17 @@ def cve_card(nvd: dict, epss: dict | None, verdict: dict, stack: dict | None = N
             _row("Ransomware", paint("not known", GREY) + paint(" (no confirmed ransomware use)", GREY))
     else:
         _row("CISA KEV", paint("no", GREY) + paint(" (not on the known-exploited list)", GREY))
+
+    # v0.10: what an attack needs before it can work, and the program's exclusions
+    for i, p in enumerate(pre or []):
+        if p["source"] == "curated":   # the specific reason says it better than the general label
+            text = f"{safe(p['reason'])} " + paint("(0x41 note)", GREY)
+        else:
+            text = f"{p['label']} " + paint(f"({safe(p['reason'])})", GREY)
+        _row_wrapped("Needs" if i == 0 else "", f"{paint(p['short'].ljust(6), BOLD, YELLOW)}{text}")
+    if excluded:
+        _row("Bug bounty", paint("likely not reportable here", BOLD, YELLOW)
+             + f" · your exclusions rule out: {', '.join(excluded)}")
 
     if nvd.get("cwes"):
         _row("Weakness", ", ".join(nvd["cwes"]))
@@ -366,10 +378,13 @@ def summary_table(results: list[dict], missing: list[str]) -> None:
     badge_w = _BADGE_W + (2 if ENABLED else 4)  # " LABEL " in color, "[ LABEL ]" without
     has_stack = any(r.get("stack") for r in results)  # only show the column when a profile is in use
     has_found = any(r.get("found_on") for r in results)  # only when CVEs came from monomi
+    has_needs = any(r.get("preconditions") for r in results)  # v0.10: only when a CVE needs something
+    needs_w = 12
     found_w = 30
     found_head = f"{'Found on'.ljust(found_w)}  " if has_found else ""
+    needs_head = f"{'Needs'.ljust(needs_w)}  " if has_needs else ""
     stack_head = f"{'Stack':<5}  " if has_stack else ""
-    head = f"  {'#':>3}  {'CVE'.ljust(16)} {'Verdict'.ljust(badge_w)}  {'CVSS':>4}  {'EPSS':>6}  {'KEV':<3}  {'Ransom':<6}  {stack_head}{found_head}Product"
+    head = f"  {'#':>3}  {'CVE'.ljust(16)} {'Verdict'.ljust(badge_w)}  {'CVSS':>4}  {'EPSS':>6}  {'KEV':<3}  {'Ransom':<6}  {stack_head}{needs_head}{found_head}Product"
     print(paint(head, GREY))
 
     prod_room = max(16, _cols() - len(head) + len("Product"))
@@ -405,6 +420,12 @@ def summary_table(results: list[dict], missing: list[str]) -> None:
                 stack_txt = paint("?    ", YELLOW) + "  "
             else:
                 stack_txt = paint("-    ", GREY) + "  "
+        needs_txt = ""
+        if has_needs:
+            shorts = ",".join(p["short"] for p in r.get("preconditions") or []) or "-"
+            mark = "*" if r.get("excluded_by") else ""
+            cell = _cell(shorts + mark, needs_w).ljust(needs_w)
+            needs_txt = (paint(cell, YELLOW) if mark else paint(cell, GREY) if shorts == "-" else cell) + "  "
         found_txt = ""
         if has_found:
             locs = r.get("found_on") or []
@@ -420,7 +441,7 @@ def summary_table(results: list[dict], missing: list[str]) -> None:
         if len(affected) > 1:
             product += f" (+{len(affected) - 1})"
 
-        print(f"  {n:>3}  {nvd['id'].ljust(16)} {badge}  {cvss_txt}  {epss_txt}  {kev_txt}  {ransom_txt}  {stack_txt}{found_txt}{_cell(product, prod_room)}")
+        print(f"  {n:>3}  {nvd['id'].ljust(16)} {badge}  {cvss_txt}  {epss_txt}  {kev_txt}  {ransom_txt}  {stack_txt}{needs_txt}{found_txt}{_cell(product, prod_room)}")
 
     if missing:
         print()

@@ -21,7 +21,8 @@ import sys
 import time
 from datetime import datetime
 
-from kaidoku import akashi_import, analysis, envprofile, home, monomi_import, preconditions, triage, ui
+from kaidoku import (agent_prompt, akashi_import, analysis, envprofile, home, monomi_import, preconditions,
+                     triage, ui)
 from kaidoku.sources import epss, kev, nvd
 from kaidoku.ui import fail, good, info, warn
 
@@ -124,6 +125,21 @@ def lookup(cve_id: str, score: dict | None, catalog: dict, profile: dict | None,
     return result
 
 
+def write_agent_prompt(results: list[dict], path: str) -> str:
+    """--agent-prompt: the 'are we affected?' prompt for a coding agent, saved
+    to `path` (or reports/agent-prompt_<time>.md when it's empty)."""
+    if not path:
+        os.makedirs(REPORTS_DIR, exist_ok=True)
+        path = os.path.join(REPORTS_DIR, f"agent-prompt_{datetime.now():%Y-%m-%d_%H%M}.md")
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(agent_prompt.build(results))
+    print()
+    good(f"Agent prompt for {len(results)} CVE(s) saved to {path}")
+    info("Open your coding agent in the repo to check and paste the file's contents. It is told to stay "
+         "read-only and answer in JSON.")
+    return path
+
+
 def run_akashi(args, profile: dict | None) -> int:
     """Explain the leads in an akashi proof history: a card each (no AI
     needed), a ranked table, and with --ai a briefing per lead. Akashi's
@@ -199,6 +215,9 @@ def main() -> int:
                         help="a bug bounty program's excluded classes, one per line (dos, mitm, auth, "
                              "user_action, local, adjacent, config): matching CVEs are marked "
                              "'likely not reportable here', never hidden")
+    parser.add_argument("--agent-prompt", nargs="?", const="", metavar="FILE",
+                        help="write an 'are we affected?' prompt for a coding agent (Claude Code, Codex) "
+                             "to run read-only in your repo; default reports/agent-prompt_<time>.md")
     parser.add_argument("--json", metavar="FILE", help="save results to a JSON file")
     parser.add_argument("--no-color", action="store_true", help="plain output (also respects NO_COLOR)")
     args = parser.parse_args()
@@ -228,6 +247,9 @@ def main() -> int:
     if args.akashi:
         if args.cves or args.file or args.monomi:
             fail("--akashi explains findings on its own: run CVE lookups (IDs, --file, --monomi) separately.")
+            return 1
+        if args.agent_prompt is not None:
+            fail("--agent-prompt works on CVEs (IDs, --file, --monomi), not akashi findings.")
             return 1
         return run_akashi(args, profile)
     try:
@@ -299,6 +321,9 @@ def main() -> int:
             marked = sum(1 for r in results if r["excluded_by"])
             info(f"{marked} of {len(results)} CVE(s) fall under your exclusions "
                  f"({', '.join(args.exclusions_list)}): marked *, likely not reportable here.")
+
+    if args.agent_prompt is not None and results:
+        write_agent_prompt(results, args.agent_prompt)
 
     if args.json and results:
         with open(args.json, "w") as f:

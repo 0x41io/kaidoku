@@ -32,6 +32,9 @@ Most CVE pages give you a wall of text and a CVSS number. kaidoku combines the t
 - **Environment profiles:** describe what you run once, and kaidoku flags CVEs that hit your software (`IN YOUR STACK`), ranks them first in a batch, and tailors AI briefings to your setup. The matching works without AI. `--context` still overrides the description for a single run
 - **Ransomware flag:** shows whether CISA knows a CVE is being used in ransomware campaigns, and ranks those first in a batch
 - **Time to exploitation (v0.9):** for KEV CVEs, how many days passed between the NVD publishing the CVE and CISA confirming it's exploited. A negative number means CISA confirmed exploitation before the NVD record existed (a zero-day, or just a slow NVD: check the vendor's advisory date). Shown on the card, in `--json` (`kev.days_after_published`) and in AI briefings
+- **What an attack needs (v0.10):** every CVE gets precondition tags, each with its reason: **DoS** (only takes the service down), **MITM** (the attacker must sit in the middle), **auth** (needs an account), **user** (someone has to click or open something), **local** / **adj** (must be on the machine or the same network), **config** (only with a certain setup). They come from the CVSS vector (3.1 and 4.0), plus a small curated list for CVEs whose vector doesn't show it (e.g. nginx's resolver bug needs forged DNS answers). Shown on the card (**Needs**), as a **Needs** column in batch tables, in `--json` (`preconditions`) and in AI briefings
+- **Bug bounty exclusions (`--exclusions FILE`):** list the classes a program won't take, one per line (`dos`, `mitm`, `auth`, `user_action`, `local`, `adjacent`, `config`), and CVEs that fall under them are marked **likely not reportable here** (`*` in the table, `excluded_by` in `--json`). Never hidden, and the defender verdict doesn't change
+- **"Are we affected?" prompt for a coding agent (`--agent-prompt [FILE]`):** writes a prompt you paste into Claude Code, Codex or another agent running in your repository. It's told to stay read-only (no edits, installs, builds or network), to check lockfiles first for exact versions, to treat the CVE data as untrusted (it sits in a marked block that text inside it can't close), and to answer in one fixed JSON shape: `affected` yes / no / unknown, with file, line, package and version as evidence
 - **Batch triage:** feed it a list, a scanner export, or piped input, and get a ranked table, most urgent first (KEV, then EPSS, then CVSS)
 - **Reads CVEs from any text:** Nessus/OpenVAS/Trivy exports, CSVs, emails, advisories. If a CVE ID is in there, kaidoku finds it
 - **Reads [mønømi](https://github.com/0x41io/monomi) scans (`--monomi FILE`):** feed it monomi's `--json` output and every CVE keeps the host and IP it was found on. The card gets a **Found on** line, batch tables get a **Found on** column, and AI briefings name the affected hosts and suggest verifying each one. CDN edge IPs are skipped, same as in monomi
@@ -115,6 +118,13 @@ cat cves.txt | python kaidoku.py -
 
 # Batch, but show the full card for each CVE too
 python kaidoku.py --file scan-export.csv --cards
+
+# Bug bounty: what does each CVE need, and which won't this program take?
+# exclusions.txt has one class per line, e.g. "dos" and "mitm"
+python kaidoku.py --monomi scan.json --exclusions exclusions.txt
+
+# Ask a coding agent in your repo whether you're affected (saved to reports/)
+python kaidoku.py CVE-2024-3400 CVE-2023-4966 --agent-prompt
 
 # Plain output (also honors NO_COLOR)
 python kaidoku.py CVE-2021-44228 --no-color
@@ -224,6 +234,8 @@ kaidoku/                    the repo
 │   ├── api.py              # what the 0x41 pipeline calls (quiet, returns data)
 │   ├── home.py             # where reports/ and cache/ live (KAIDOKU_HOME)
 │   ├── triage.py           # rule-based urgency verdict (KEV > EPSS > CVSS)
+│   ├── preconditions.py    # what an attack needs (DoS, MITM, auth...) + --exclusions
+│   ├── agent_prompt.py     # --agent-prompt: "are we affected?" for a coding agent
 │   ├── analysis.py         # Claude briefings (CVEs and akashi findings)
 │   ├── monomi_import.py    # reads monomi --json (CVEs + where they were found)
 │   ├── akashi_import.py    # reads akashi's proof history (findings, states, timelines)
@@ -270,6 +282,8 @@ python3 -m pytest -v
 - [x] v0.7.1: CVSS 3.1 and 4.0 side by side, v4.0 attack tables, white and grey AI briefings (red only on warnings)
 - [x] v0.8: an installable package (`pip install -e .`, the `kaidoku` command) with a quiet library API for the 0x41 pipeline
 - [x] v0.9: days from publication to CISA-confirmed exploitation on KEV CVEs
+- [x] v0.10: precondition tags (DoS, MITM, auth, user, local, adjacent, config) from the CVSS vector plus a curated list, `--exclusions` for bug bounty program rules (marked, never hidden), and `--agent-prompt` for a read-only "are we affected?" check by a coding agent
+- [ ] Read the coding agent's answer back (`--agent-answer`), then re-check after the fix
 - [ ] Version-aware stack matching (reading lockfiles for exact versions)
 - [ ] Web UI with PDF report export
 

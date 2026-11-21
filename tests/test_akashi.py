@@ -282,3 +282,58 @@ def test_briefing_theme_has_no_brand_red():
 def test_priority_badges_keep_their_warning_colors():
     from kaidoku import ui
     assert "#8b0000" in ui._PRIORITY_STYLE["critical"] and "#c8102e" in ui._PRIORITY_STYLE["high"]
+
+
+# --- app-logic findings (akashi v0.3: access_between_accounts) ---
+# Fixture: real akashi v0.3.0 output (network stubbed): an access-control
+# lead confirmed, then fixed (the actor got a 404 after the fix).
+
+ACCESS = str(Path(__file__).parent / "fixtures" / "akashi-access-history.jsonl")
+
+
+def test_an_access_finding_reads_confirmed_then_fixed_with_its_own_name():
+    target, leads = akashi_import.load(ACCESS)
+    assert target == "app.41xlab" + ".test"
+    (a1,) = leads
+    assert a1["name"] == "Broken access control between accounts"
+    assert a1["state"] == "fixed"
+    assert [t["word"] for t in a1["timeline"]] == ["confirmed", "fixed"]
+
+
+def test_each_rule_gets_its_own_recheck_command():
+    assert akashi_import.recheck_command("access_between_accounts").startswith("akashi app recheck")
+    assert akashi_import.recheck_command("around_cdn") == "akashi recheck"
+    assert akashi_import.recheck_command("something_new") == "akashi recheck"
+
+
+def test_an_unclear_access_check_says_verify_again_not_recheck():
+    # recheck needs a confirmed finding, so for an unclear app check the next
+    # step is to settle the cause and run `akashi app verify` again
+    _, (a1,) = akashi_import.load(ACCESS)
+    unclear = dict(a1, state="unclear", reason="")
+    step = akashi_import.next_step(unclear)
+    assert "akashi app verify" in step and "akashi recheck" not in step
+
+
+def test_a_reason_code_still_wins_over_the_rule():
+    _, leads = akashi_import.load(HISTORY)
+    l1 = next(d for d in leads if d["id"] == "L1")      # around_cdn, origin_silent
+    assert "reject (not drop)" in akashi_import.next_step(l1)
+
+
+def test_the_ai_is_given_the_right_recheck_command():
+    target, (a1,) = akashi_import.load(ACCESS)
+    p = analysis.finding_payload(dict(a1, state="open"), target)
+    assert p["recheck_command"].startswith("akashi app recheck")
+    _, leads = akashi_import.load(HISTORY)
+    assert analysis.finding_payload(leads[0], target)["recheck_command"] == "akashi recheck"
+
+
+def test_the_ai_gets_akashis_evidence_lines_and_nothing_from_the_record():
+    # akashi keeps only status codes and a fingerprint note, never the record,
+    # so the AI's evidence is exactly akashi's lines for the newest verdict
+    target, (a1,) = akashi_import.load(ACCESS)
+    p = analysis.finding_payload(a1, target)
+    assert list(p["evidence"].values()) == a1["evidence"]
+    assert "bob GET /api/notes/2: 200" in p["evidence"]["E1"]
+    assert '"text"' not in json.dumps(p)   # the note's body field never appears

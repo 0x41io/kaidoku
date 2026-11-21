@@ -24,6 +24,7 @@ RULE_NAMES = {
     "takeover_unknown": "Possible subdomain takeover",
     "email_spoofing": "Email spoofing",
     "around_cdn": "Origin reachable around the CDN",
+    "access_between_accounts": "Broken access control between accounts",
 }
 
 # The state shown on the card, worked out from the history (not by the AI):
@@ -53,6 +54,23 @@ def step_word(row: dict, before: list) -> str:
     return {CONFIRMED: "confirmed", RULED_OUT: "ruled out", INCONCLUSIVE: "unclear"}[row["status"]]
 
 
+# The command that re-checks a lead, by Akashi rule. App-logic checks (since
+# akashi v0.3) run from a case file with their own commands; every other rule
+# uses `akashi recheck`. Worked out here, so the AI is told the command, never
+# left to guess it.
+RECHECK = {"access_between_accounts": "akashi app recheck CASE --scope FILE --creds FILE"}
+DEFAULT_RECHECK = "akashi recheck"
+# An unclear app-logic check can't be re-checked (recheck needs a confirmed
+# finding): settle what the headline says, then verify it again.
+UNCLEAR_NEXT = {"access_between_accounts": ("settle what the headline says (for example a failed login), "
+                                            "then run `akashi app verify` again with the same case file")}
+
+
+def recheck_command(rule: str) -> str:
+    """How to re-check a lead of this rule after its fix."""
+    return RECHECK.get(rule, DEFAULT_RECHECK)
+
+
 # What to do next for a lead that's still unclear, by Akashi's reason code.
 # Worked out here, never by the AI. Unknown or missing reason -> the default.
 NEXT_STEPS = {
@@ -66,7 +84,9 @@ def next_step(lead: dict) -> str:
     """The next step for an unclear lead ('' for any other state)."""
     if lead["state"] != "unclear":
         return ""
-    return NEXT_STEPS.get(lead["reason"], DEFAULT_NEXT)
+    if lead["reason"] in NEXT_STEPS:
+        return NEXT_STEPS[lead["reason"]]
+    return UNCLEAR_NEXT.get(lead["rule"], DEFAULT_NEXT)
 
 
 def _state(rows: list) -> str:

@@ -13,6 +13,10 @@ def load(path: str) -> tuple[str, list[str], dict[str, list[dict]]]:
     found_on maps each CVE to where monomi saw it:
     {'CVE-2023-44487': [{'ip': '34.246.45.89', 'hosts': ['app.example.com']}], ...}
     CDN edge IPs are skipped: their CVEs belong to the CDN, not the target.
+    So are IPs monomi labels "not_own" (v1.23.1): someone else's server, such
+    as third-party hosting or a shared front door, whose CVEs belong to that
+    service. A scan from before monomi v1.23.1 has no such label, so only its
+    CDN edges are skipped.
     """
     try:
         with open(path, encoding="utf-8") as f:
@@ -28,7 +32,7 @@ def load(path: str) -> tuple[str, list[str], dict[str, list[dict]]]:
 
     found_on = {}
     for ip, d in exposure.get("ips", {}).items():
-        if d.get("shared_edge"):
+        if d.get("shared_edge") or d.get("not_own"):
             continue
         for cve in d.get("vulns", []):
             found_on.setdefault(cve.upper(), []).append({"ip": ip, "hosts": d.get("hosts", [])})

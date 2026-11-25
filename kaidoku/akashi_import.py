@@ -24,6 +24,7 @@ RULE_NAMES = {
     "takeover_unknown": "Possible subdomain takeover",
     "email_spoofing": "Email spoofing",
     "around_cdn": "Origin reachable around the CDN",
+    "exposed_file": "Files served by mistake",  # akashi v0.6.0 (mønømi v1.27 --content)
     "access_between_accounts": "Broken access control between accounts",
 }
 
@@ -63,7 +64,12 @@ DEFAULT_RECHECK = "akashi recheck"
 # An unclear app-logic check can't be re-checked (recheck needs a confirmed
 # finding): settle what the headline says, then verify it again.
 UNCLEAR_NEXT = {"access_between_accounts": ("settle what the headline says (for example a failed login), "
-                                            "then run `akashi app verify` again with the same case file")}
+                                            "then run `akashi app verify` again with the same case file"),
+                # akashi v0.6.0: unclear means a timeout, or the host refused every path, made-up
+                # ones too (often a WAF blocking akashi), so the file's state couldn't be seen
+                "exposed_file": ("run akashi again with the program's research header (`--research FILE`): "
+                                 "`akashi recheck` if it was confirmed before, `akashi verify` if not. "
+                                 "If every path is still refused, open the file by hand")}
 
 
 def recheck_command(rule: str) -> str:

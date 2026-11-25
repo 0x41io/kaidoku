@@ -337,3 +337,14 @@ def test_the_ai_gets_akashis_evidence_lines_and_nothing_from_the_record():
     assert list(p["evidence"].values()) == a1["evidence"]
     assert "bob GET /api/notes/2: 200" in p["evidence"]["E1"]
     assert '"text"' not in json.dumps(p)   # the note's body field never appears
+
+
+# --- exposed files (akashi v0.6.0: exposed_file) ---
+
+def test_exposed_files_get_a_plain_name_and_their_own_unclear_step():
+    assert akashi_import.rule_name("exposed_file") == "Files served by mistake"
+    assert akashi_import.recheck_command("exposed_file") == "akashi recheck"
+    lead = {"state": "unclear", "reason": "", "rule": "exposed_file"}
+    assert "--research FILE" in akashi_import.next_step(lead)
+    # any other state has no next step, the same as every rule
+    assert akashi_import.next_step({**lead, "state": "open"}) == ""

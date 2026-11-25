@@ -284,6 +284,7 @@ python3 -m pytest -v
 - [x] v0.9: days from publication to CISA-confirmed exploitation on KEV CVEs
 - [x] v0.10: precondition tags (DoS, MITM, auth, user, local, adjacent, config) from the CVSS vector plus a curated list, `--exclusions` for bug bounty program rules (marked, never hidden), and `--agent-prompt` for a read-only "are we affected?" check by a coding agent
 - [x] v0.10.2: `--monomi` skips IPs monomi labels `not_own` (someone else's server), not only CDN edges, so CVEs on a shared front end like Google's are never listed as the target's
+- [x] v0.10.3: names akashi v0.6.0's `exposed_file` findings "Files served by mistake" on the card and in the AI briefing, instead of the raw rule name, and an unclear one gets its own next step: run akashi again with the program's research header (a host that refuses every path is often a WAF blocking it), `recheck` if it was confirmed before, `verify` if not
 - [ ] Read the coding agent's answer back (`--agent-answer`), then re-check after the fix
 - [ ] Version-aware stack matching (reading lockfiles for exact versions)
 - [ ] Web UI with PDF report export

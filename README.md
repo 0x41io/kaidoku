@@ -289,9 +289,15 @@ python3 -m pytest -v
 - [ ] Version-aware stack matching (reading lockfiles for exact versions)
 - [ ] Web UI with PDF report export
 
-## License
+## Licensing
 
-MIT. See [LICENSE](LICENSE).
+Copyright (c) 2026 0x41.
+
+From v0.10.4 on, kaidoku is licensed under the **GNU Affero General Public License v3.0 only** (AGPL-3.0-only); see [LICENSE](LICENSE). Versions before v0.10.4 were released under the MIT License and stay under it.
+
+In short: you can use, study, change and share it. If you share a changed version, or run one as a network service other people use, you must make its source available to them under the same license. This is a summary; the LICENSE text is what counts.
+
+Outside contributions need a contributor license agreement (CLA), so 0x41 can keep licensing the project as a whole. Open an issue and ask before sending a pull request.
 
 ---
 

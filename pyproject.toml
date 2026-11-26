@@ -9,7 +9,7 @@ build-backend = "setuptools.build_meta"
 name = "kaidoku"
 description = "0x41 / kaidoku - findings and CVEs, explained"
 readme = "README.md"
-license = "MIT"
+license = "AGPL-3.0-only"
 license-files = ["LICENSE"]
 authors = [{ name = "0x41" }]
 requires-python = ">=3.10"

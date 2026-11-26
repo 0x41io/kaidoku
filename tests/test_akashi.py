@@ -348,3 +348,14 @@ def test_exposed_files_get_a_plain_name_and_their_own_unclear_step():
     assert "--research FILE" in akashi_import.next_step(lead)
     # any other state has no next step, the same as every rule
     assert akashi_import.next_step({**lead, "state": "open"}) == ""
+
+
+# --- broken DNS delegations (akashi v0.7.0: dangling_ns) ---
+
+def test_broken_delegations_get_a_plain_name_and_their_own_unclear_step():
+    assert akashi_import.rule_name("dangling_ns") == "Broken DNS delegation"
+    assert akashi_import.recheck_command("dangling_ns") == "akashi recheck"
+    lead = {"state": "unclear", "reason": "", "rule": "dangling_ns"}
+    step = akashi_import.next_step(lead)
+    assert "dig +trace" in step and "confirm that with the registry" in step and "akashi recheck" in step
+    assert akashi_import.next_step({**lead, "state": "ruled_out"}) == ""

@@ -286,6 +286,7 @@ python3 -m pytest -v
 - [x] v0.10.2: `--monomi` skips IPs monomi labels `not_own` (someone else's server), not only CDN edges, so CVEs on a shared front end like Google's are never listed as the target's
 - [x] v0.10.3: names akashi v0.6.0's `exposed_file` findings "Files served by mistake" on the card and in the AI briefing, instead of the raw rule name, and an unclear one gets its own next step: run akashi again with the program's research header (a host that refuses every path is often a WAF blocking it), `recheck` if it was confirmed before, `verify` if not
 - [x] v0.10.4: licensed AGPL-3.0-only from this version on (earlier versions stay MIT; see Licensing). No change in behavior
+- [x] v0.10.5: names akashi v0.7.0's `dangling_ns` findings "Broken DNS delegation", and an unclear one gets its own next step: check the named nameservers by hand, confirm with the registry if one's domain has no registration found, remove the delegation or recreate the zone, then `akashi recheck`
 - [ ] Read the coding agent's answer back (`--agent-answer`), then re-check after the fix
 - [ ] Version-aware stack matching (reading lockfiles for exact versions)
 - [ ] Web UI with PDF report export

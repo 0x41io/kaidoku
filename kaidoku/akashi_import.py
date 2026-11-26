@@ -25,6 +25,7 @@ RULE_NAMES = {
     "email_spoofing": "Email spoofing",
     "around_cdn": "Origin reachable around the CDN",
     "exposed_file": "Files served by mistake",  # akashi v0.6.0 (mønømi v1.27 --content)
+    "dangling_ns": "Broken DNS delegation",  # akashi v0.7.0
     "access_between_accounts": "Broken access control between accounts",
 }
 
@@ -69,7 +70,14 @@ UNCLEAR_NEXT = {"access_between_accounts": ("settle what the headline says (for 
                 # ones too (often a WAF blocking akashi), so the file's state couldn't be seen
                 "exposed_file": ("run akashi again with the program's research header (`--research FILE`): "
                                  "`akashi recheck` if it was confirmed before, `akashi verify` if not. "
-                                 "If every path is still refused, open the file by hand")}
+                                 "If every path is still refused, open the file by hand"),
+                # akashi v0.7.0: never confirmed (a free domain is a person's call); unclear says
+                # which nameservers it's delegated to and whether their domains are registered
+                "dangling_ns": ("check the nameservers the proof names by hand (`dig +trace`). If one is on a "
+                                "domain with no registration found, confirm that with the registry before "
+                                "anything else, since whoever registers it controls DNS for the whole zone. "
+                                "The fix is to remove the delegation (its NS records in the parent zone) or "
+                                "recreate the zone where it points; then run `akashi recheck`")}
 
 
 def recheck_command(rule: str) -> str:
